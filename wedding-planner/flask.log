@@ -11,9 +11,4 @@ Wedding Planner 启动中...
  * Restarting with stat
  * Debugger is active!
  * Debugger PIN: 549-454-263
-127.0.0.1 - - [16/Mar/2026 16:08:17] "GET /login HTTP/1.1" 200 -
-127.0.0.1 - - [16/Mar/2026 16:08:28] "GET /login HTTP/1.1" 200 -
-127.0.0.1 - - [16/Mar/2026 16:08:39] "[32mGET / HTTP/1.1[0m" 302 -
-127.0.0.1 - - [16/Mar/2026 16:08:48] "GET /login HTTP/1.1" 200 -
-127.0.0.1 - - [16/Mar/2026 16:08:57] "[33mPOST /login_route HTTP/1.1[0m" 404 -
-127.0.0.1 - - [16/Mar/2026 16:08:57] "[32mGET / HTTP/1.1[0m" 302 -
+127.0.0.1 - - [16/Mar/2026 18:41:29] "GET /login HTTP/1.1" 200 -

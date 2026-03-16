@@ -13,10 +13,25 @@ from werkzeug.utils import secure_filename
 from auth import init_auth, login_required, login_view, logout_view, change_password_view
 
 app = Flask(__name__)
-app.secret_key = 'wedding-planner-secret-change-in-production'
+app.secret_key = os.environ.get('SECRET_KEY', 'wedding-planner-secret-change-in-production')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app.config['DATABASE'] = os.path.join(BASE_DIR, 'data/wedding.db')
-app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'static/images')
+
+# 数据库配置：优先使用环境变量（Vercel Neon），否则本地SQLite
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL:
+    app.config['DATABASE_TYPE'] = 'postgresql'
+    app.config['DATABASE_URL'] = DATABASE_URL
+else:
+    app.config['DATABASE_TYPE'] = 'sqlite'
+    app.config['DATABASE'] = os.path.join(BASE_DIR, 'data', 'wedding.db')
+
+# Vercel环境：使用/tmp作为上传目录（只读文件系统）
+if os.environ.get('VERCEL'):
+    app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
+else:
+    app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'static', 'images')
+
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
