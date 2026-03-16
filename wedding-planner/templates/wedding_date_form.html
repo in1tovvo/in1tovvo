@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}设置婚礼日期 - 备婚大作战{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h4 class="mb-0"><i class="bi bi-calendar-event me-2"></i>设置婚礼日期</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-4">
+                        <label class="form-label">选择婚礼日期 <span class="text-danger">*</span></label>
+                        <input type="date" name="wedding_date" class="form-control form-control-lg" 
+                               value="{{ current_date }}" required>
+                        <div class="form-text">
+                            设置后，系统会显示倒计时，并基于此日期自动计算任务截止日期
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>温馨提示：</strong><br>
+                        - 建议提前 12-18 个月开始筹备<br>
+                        - 避开重要节日（如春节、国庆）以便更灵活<br>
+                        - 考虑双方家庭的吉日和禁忌
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">返回仪表盘</a>
+                        <button type="submit" class="btn btn-primary">保存并返回</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if current_date %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h5>当前已设置婚礼日期</h5>
+                <p class="h3 text-primary mb-0">{{ current_date }}</p>
+                <small class="text-muted">
+                    距离婚礼还有 {{ (wedding_date - today).days if wedding_date else 0 }} 天
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

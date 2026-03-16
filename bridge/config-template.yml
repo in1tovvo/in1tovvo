@@ -1,0 +1,58 @@
+# go-cqhttp 配置文件
+# 参考：https://docs.go-cqhttp.org/guide/quick_start
+
+account:
+  # QQ 账号（建议使用扫码登录，留空密码）
+  uin: 123456789  # 替换为你的 QQ 号
+  password: ""    # 留空则扫码登录；如果使用密码或 token，填写此处
+  encrypt: false  # 是否需要加密（默认 false）
+
+# 心跳配置
+heartbeat:
+  interval: 5
+
+# 消息处理配置
+message:
+  # 消息预格式（string 或 array，保持 string 即可）
+  post-format: string
+  # 忽略其他插件发送的消息（防止循环）
+  flag: ignore
+
+# 服务端配置（反向 HTTP/WebSocket，供桥接服务连接）
+servers:
+  - http:
+      address: 127.0.0.1:5700  # HTTP 接口地址，桥接服务通过此地址发送消息
+    adapter: reverse
+    # 反向 WebSocket 地址（桥接服务连接此地址接收消息）
+    universal: ws://127.0.0.1:5701
+
+# 数据库配置（用于存储消息、群组信息等）
+database:
+  cache:
+    - type: memory
+    - type: memory
+      id: 1
+
+# 日志配置
+log:
+  level: info                  # 日志级别：debug/info/warn/error
+  file: log/go-cqhttp.log      # 日志文件路径
+
+# 实验性功能
+extra:
+  - plugin:
+      load:
+        - 1                # 加载第一个插件（如果有插件的话）
+      enable:
+        - 1
+
+#  Covenant 配置（可选）
+# covenant:
+#   token: ""
+#   host: ""
+#   port: 0
+
+# 忽略某些消息类型
+ignore:
+  - group_join
+  - group_leave

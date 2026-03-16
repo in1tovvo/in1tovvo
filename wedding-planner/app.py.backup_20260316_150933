@@ -1,0 +1,1618 @@
+#!/usr/bin/env python3
+"""
+备婚大作战 - V2 修复版
+"""
+
+import sqlite3
+import os
+import json
+from datetime import datetime, timedelta, date
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, g, jsonify
+from werkzeug.utils import secure_filename
+
+app = Flask(__name__)
+app.secret_key = 'wedding-planner-secret-change-in-production'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app.config['DATABASE'] = os.path.join(BASE_DIR, 'data/wedding.db')
+app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'static/images')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+# ==================== 详细备婚事项库（内置） ====================
+# 按照 Wedding Timeline 组织，每个事项包含：标题、分类、建议时间（婚礼前天数）、优先级、详细描述
+
+WEDDING_CHECKLIST = {
+    "18-12个月": [
+        {
+            "id": "budget_total",
+            "title": "确定婚礼预算总额",
+            "category": "预算",
+            "days_before": 540,
+            "priority": "critical",
+            "description": "包括：场地、餐饮、摄影、摄像、化妆、婚纱、策划等各项预算分配",
+            "checklist": ["确定总预算范围", "分配各项目比例", "预留应急资金(10-15%)"]
+        },
+        {
+            "id": "wedding_date",
+            "title": "初步确定婚礼日期",
+            "category": "日程",
+            "days_before": 520,
+            "priority": "critical",
+            "description": "避开重要节日/家庭忌日，考虑季节、天气、场地 availability",
+            "checklist": ["咨询双方家庭吉日", "查询场地档期", "预留准备时间"]
+        },
+        {
+            "id": "engagement",
+            "title": "订婚仪式（如需要）",
+            "category": "仪式",
+            "days_before": 500,
+            "priority": "low",
+            "description": "传统订婚习俗，双方家庭见面",
+            "checklist": ["确定订婚日期", "准备聘礼/回礼", "邀请亲友", "预订餐厅"]
+        },
+        {
+            "id": "inspiration_collect",
+            "title": "搜集婚礼灵感",
+            "category": "策划",
+            "days_before": 480,
+            "priority": "low",
+            "description": "Pinterest、小红书、婚礼纪等平台收集婚礼风格、布置、造型灵感",
+            "checklist": ["创建灵感板", "确定婚礼主题", "收集色彩搭配", "保存参考图片"]
+        },
+        {
+            "id": "wedding_theme",
+            "title": "确定婚礼主题与色调",
+            "category": "策划",
+            "days_before": 460,
+            "priority": "high",
+            "description": "中式/西式/森系/海洋/复古等主题，确定主色调",
+            "checklist": ["确定主题风格", "选择色彩方案", "与策划师沟通"]
+        },
+        {
+            "id": "planner_select",
+            "title": "寻找并确定婚礼策划师",
+            "category": "婚庆",
+            "days_before": 450,
+            "priority": "high",
+            "description": "查看案例、对比报价、签订合同",
+            "checklist": ["搜索本地婚庆公司", "查看实景案例", "面谈策划师", "对比3-5家", "签约"]
+        },
+        {
+            "id": "guest_list_draft",
+            "title": "初步拟定宾客名单",
+            "category": "宾客",
+            "days_before": 440,
+            "priority": "high",
+            "description": "两大阵营（男方、女方）分别列出，估算人数",
+            "checklist": ["列出直系亲属", "列出亲朋好友", "估算总人数", "确定A/B名单"]
+        },
+        {
+            "id": "venue_research",
+            "title": "开始了解婚礼场地",
+            "category": "场地",
+            "days_before": 430,
+            "priority": "high",
+            "description": "酒店、户外草坪、特色场地等，确定餐标和容纳人数",
+            "checklist": ["列出候选场地", "实地考察3-5家", "对比价格和档期", "确认宴会厅规模"]
+        }
+    ],
+    "12-9个月": [
+        {
+            "id": "venue_booking",
+            "title": "预订婚礼场地",
+            "category": "场地",
+            "days_before": 360,
+            "priority": "critical",
+            "description": "签订合同、支付定金、确定婚礼日期和人数上限",
+            "checklist": ["确定最终场地", "签订合同", "支付定金", "确认婚期", "确定菜单"]
+        },
+        {
+            "id": "planner_confirm",
+            "title": "确定并签约婚庆策划公司",
+            "category": "婚庆",
+            "days_before": 340,
+            "priority": "critical",
+            "description": "确认策划方案、布置效果图、人员配置",
+            "checklist": ["确认策划方案", "查看布置效果图", "明确服务内容", "支付定金", "签约"]
+        },
+        {
+            "id": "photography_booking",
+            "title": "预订婚纱摄影",
+            "category": "摄影",
+            "days_before": 330,
+            "priority": "high",
+            "description": "确定摄影风格、套餐、拍摄日期（含旅拍）",
+            "checklist": ["选择摄影机构", "确定拍摄风格", "预约拍摄日期", "签订合同"]
+        },
+        {
+            "id": "wedding_dress",
+            "title": "预订新娘婚纱/礼服",
+            "category": "服装",
+            "days_before": 320,
+            "priority": "high",
+            "description": "试穿、定制或租赁，包括出门纱、主纱、敬酒服",
+            "checklist": ["搜索婚纱款式", "预约试穿", "确定定制/租赁", "测量尺寸", "支付定金"]
+        },
+        {
+            "id": "groom_suit",
+            "title": "预订新郎西装/礼服",
+            "category": "服装",
+            "days_before": 320,
+            "priority": "medium",
+            "description": "定制或购买，需多次试穿修改",
+            "checklist": ["确定款式", "选择面料", "量体定制", "试穿修改"]
+        },
+        {
+            "id": "mc_booking",
+            "title": "预订婚礼主持/司仪",
+            "category": "人员",
+            "days_before": 310,
+            "priority": "high",
+            "description": "查看主持案例，确定风格（幽默/温馨/庄严）",
+            "checklist": ["寻找主持人", "沟通流程", "确认风格", "签订合同"]
+        },
+        {
+            "id": "makeup_booking",
+            "title": "预订化妆师",
+            "category": "人员",
+            "days_before": 300,
+            "priority": "high",
+            "description": "新娘妆、妈妈妆，需试妆确定妆容",
+            "checklist": ["搜索化妆师", "预约试妆", "确定妆容", "签订合同"]
+        },
+        {
+            "id": "ring_research",
+            "title": "开始搜集婚戒/首饰",
+            "category": "首饰",
+            "days_before": 290,
+            "priority": "medium",
+            "description": "了解钻石4C标准、戒指款式、品牌对比",
+            "checklist": ["学习钻石知识", "确定预算", "挑选款式", "预约看店"]
+        }
+    ],
+    "9-6个月": [
+        {
+            "id": "flow_confirm",
+            "title": "确定婚礼流程方案",
+            "category": "策划",
+            "days_before": 270,
+            "priority": "high",
+            "description": "与策划师确认婚礼当天详细流程表",
+            "checklist": ["制定流程草稿", "与主持人沟通", "确定环节顺序", "打印流程表"]
+        },
+        {
+            "id": "menu_confirm",
+            "title": "预订婚宴菜单和酒水",
+            "category": "餐饮",
+            "days_before": 260,
+            "priority": "high",
+            "description": "试菜、确定菜单、酒水数量",
+            "checklist": ["试菜并确认菜单", "确定酒水种类", "计算酒水数量", "签订补充协议"]
+        },
+        {
+            "id": "videography_booking",
+            "title": "预订婚礼摄像",
+            "category": "摄像",
+            "days_before": 250,
+            "priority": "medium",
+            "description": "视频跟拍、快剪、完整纪录片",
+            "checklist": ["选择摄像团队", "确定拍摄风格", "观看样片", "签约"]
+        },
+        {
+            "id": "dj_lighting",
+            "title": "预订婚礼 DJ/灯光音响",
+            "category": "设备",
+            "days_before": 240,
+            "priority": "medium",
+            "description": "音乐DJ、灯光效果、音响设备",
+            "checklist": ["确定音乐风格", "预订DJ", "确认灯光方案", "现场音响测试"]
+        },
+        {
+            "id": "wedding_car",
+            "title": "预订婚车",
+            "category": "交通",
+            "days_before": 230,
+            "priority": "medium",
+            "description": "头车（豪车）+跟车，确定路线、司机",
+            "checklist": ["选择婚车品牌", "租赁公司对比", "确认车辆数量", "试驾", "签订合同"]
+        },
+        {
+            "id": "jewelry_buy",
+            "title": "购买结婚戒指/首饰",
+            "category": "首饰",
+            "days_before": 220,
+            "priority": "high",
+            "description": "对戒、求婚戒指、 Wedding Band",
+            "checklist": ["确定款式", "挑选钻石/材质", "刻字服务", "付款取货"]
+        },
+        {
+            "id": "dessert_booking",
+            "title": "选购婚礼甜品台/蛋糕",
+            "category": "餐饮",
+            "days_before": 210,
+            "priority": "low",
+            "description": "甜品台设计、蛋糕定制、试吃",
+            "checklist": ["寻找甜品商家", "试吃样品", "确定设计方案", "预约制作"]
+        },
+        {
+            "id": "floral_design",
+            "title": "预订鲜花/花艺布置",
+            "category": "鲜花",
+            "days_before": 200,
+            "priority": "high",
+            "description": "手捧花、胸花、桌花、仪式区、迎宾区花艺",
+            "checklist": ["确定花材品种", "确认色系", "设计效果图", "签订合同", "确认花材保鲜"]
+        }
+    ],
+    "6-3个月": [
+        {
+            "id": "invitation_send",
+            "title": "发送正式请柬",
+            "category": "请柬",
+            "days_before": 180,
+            "priority": "high",
+            "description": "电子+纸质请柬，通知婚礼详情",
+            "checklist": ["设计请柬模板", "收集地址信息", "打印/制作", "分批寄送", "统计回执"]
+        },
+        {
+            "id": "bridesmaids_groomsmen",
+            "title": "确认伴郎伴娘并通知",
+            "category": "人员",
+            "days_before": 170,
+            "priority": "medium",
+            "description": "确定人员名单、准备服装、安排任务",
+            "checklist": ["确定人选", "发送邀请", "准备伴娘/伴郎服装", "安排任务分工"]
+        },
+        {
+            "id": "makeup_trial",
+            "title": "新郎新娘试妆",
+            "category": "美容",
+            "days_before": 160,
+            "priority": "high",
+            "description": "确定婚礼当天造型，试假发、妆面",
+            "checklist": ["预约试妆", "准备婚纱照", "确定妆发", "购买安瓶/饰品"]
+        },
+        {
+            "id": "dress_fitting",
+            "title": "新娘婚纱试穿并修改",
+            "category": "服装",
+            "days_before": 150,
+            "priority": "high",
+            "description": "多次试穿、调整尺寸、确定最终版",
+            "checklist": ["第一次试穿", "记录修改意见", "二次试穿", "最终确认"]
+        },
+        {
+            "id": "wedding_ring",
+            "title": "选购结婚对戒",
+            "category": "首饰",
+            "days_before": 140,
+            "priority": "medium",
+            "description": "挑选对戒款式、刻字、size确认",
+            "checklist": ["挑选款式", "确认尺寸", "刻字服务", "付款"]
+        },
+        {
+            "id": "honeymoon",
+            "title": "安排蜜月旅行",
+            "category": "旅行",
+            "days_before": 130,
+            "priority": "medium",
+            "description": "办理签证、预订机票酒店、规划行程",
+            "checklist": ["确定目的地", "办理签证", "预订机票酒店", "购买保险", "规划路线"]
+        },
+        {
+            "id": "groom_suit_fitting",
+            "title": "选购新郎西装并试穿修改",
+            "category": "服装",
+            "days_before": 120,
+            "priority": "medium",
+            "description": "定制作或购买，需确保合身",
+            "checklist": ["第一次量体", "试穿半成品", "最终试穿", "取货"]
+        },
+        {
+            "id": "home_decoration",
+            "title": "准备婚房布置",
+            "category": "婚房",
+            "days_before": 110,
+            "priority": "low",
+            "description": "采购装饰品、喜字、拉花、气球等",
+            "checklist": ["确定布置风格", "采购装饰品", "清洗房间", "布置"]
+        }
+    ],
+    "3-1个月": [
+        {
+            "id": "guest_confirmation",
+            "title": "收集宾客回执并统计最终人数",
+            "category": "宾客",
+            "days_before": 90,
+            "priority": "critical",
+            "description": "整理最终确认名单，区分必到和可能到",
+            "checklist": ["整理回执", "电话确认关键宾客", "统计最终人数", "提交酒店"]
+        },
+        {
+            "id": "flow_finalize",
+            "title": "与策划师确认婚礼详细流程表",
+            "category": "策划",
+            "days_before": 80,
+            "priority": "high",
+            "description": "时间轴、环节衔接、人员分工",
+            "checklist": ["确定时间表", "核对环节", "分配任务", "打印流程单"]
+        },
+        {
+            "id": "menu_final",
+            "title": "确认婚宴最终菜单和酒水数量",
+            "category": "餐饮",
+            "days_before": 70,
+            "priority": "high",
+            "description": "根据确认人数调整菜品、酒水",
+            "checklist": ["更新菜单", "计算酒水", "确认开瓶费", "提交最终清单"]
+        },
+        {
+            "id": "transportation",
+            "title": "安排住宿和交通",
+            "category": "交通",
+            "days_before": 60,
+            "priority": "medium",
+            "description": "外地宾客住宿、婚车、接送安排",
+            "checklist": ["预订酒店房间", "安排接送车辆", "制作交通指南"]
+        },
+        {
+            "id": "wedding_favors",
+            "title": "购买伴手礼/宾客回礼",
+            "category": "礼品",
+            "days_before": 50,
+            "priority": "medium",
+            "description": "选择礼品、定制包装、分装",
+            "checklist": ["挑选礼品", "定制包装", "批量采购", "分装打包"]
+        },
+        {
+            "id": "red_packets",
+            "title": "准备婚礼红包",
+            "category": "红包",
+            "days_before": 40,
+            "priority": "high",
+            "description": "不同面额、数量充足，准备专用红包袋",
+            "checklist": ["确定红包金额", "准备不同面额", "定制红包", "分装管理"]
+        },
+        {
+            "id": "beauty_care",
+            "title": "新娘美容护理",
+            "category": "美容",
+            "days_before": 30,
+            "priority": "medium",
+            "description": "皮肤管理、脱毛、牙齿美白等",
+            "checklist": ["预约美容护理", "开始皮肤管理", "脱毛护理", "牙齿美白"]
+        },
+        {
+            "id": "rehearsal",
+            "title": "最终彩排",
+            "category": "彩排",
+            "days_before": 20,
+            "priority": "high",
+            "description": "全体人员走台、熟悉流程",
+            "checklist": ["确定彩排时间", "通知所有参与人员", "现场走台", "确认动线"]
+        },
+        {
+            "id": "emergency_kit",
+            "title": "准备婚礼当天物品清单",
+            "category": "物资",
+            "days_before": 15,
+            "priority": "high",
+            "description": "应急包、备用物品、重要文件",
+            "checklist": ["列出清单", "采购物品", "整理装箱", "指定保管人"]
+        }
+    ],
+    "1-0周": [
+        {
+            "id": "seating_chart",
+            "title": "分发座位表给酒店/策划师",
+            "category": "宾客",
+            "days_before": 7,
+            "priority": "high",
+            "description": "最终座位安排，打印席位卡",
+            "checklist": ["确定座位表", "打印席位卡", "交给酒店", "准备签到台"]
+        },
+        {
+            "id": "vendor_confirm",
+            "title": "最终确认供应商到场时间和细节",
+            "category": "供应商",
+            "days_before": 5,
+            "priority": "critical",
+            "description": "拍照、电话确认所有供应商",
+            "checklist": ["列出供应商清单", "逐一确认", "收集联系人", "制作紧急联系人表"]
+        },
+        {
+            "id": "final_beauty",
+            "title": "新娘美甲、美发、全身护理",
+            "category": "美容",
+            "days_before": 3,
+            "priority": "medium",
+            "description": "婚礼前最后的美容护理",
+            "checklist": ["预约美甲", "美发护理", "全身去角质", "充足睡眠"]
+        },
+        {
+            "id": "emergency_pack",
+            "title": "准备应急包",
+            "category": "物资",
+            "days_before": 2,
+            "priority": "high",
+            "description": "针线、备用高跟鞋、创可贴、止痛药、充电宝等",
+            "checklist": ["服装应急用品", " Beauty 用品", "电子设备", "药品", "其他杂物"]
+        },
+        {
+            "id": "gift_packing",
+            "title": "分装红包、伴手礼、喜糖",
+            "category": "物资",
+            "days_before": 2,
+            "priority": "medium",
+            "description": "按桌或按人分装",
+            "checklist": ["清点数量", "按名单分装", "装箱标签", "安排专人保管"]
+        },
+        {
+            "id": "valuables",
+            "title": "贵重物品、合同、现金交接",
+            "category": "财务",
+            "days_before": 1,
+            "priority": "high",
+            "description": "交给信任的亲友保管",
+            "checklist": ["清点物品", "打包密封", "交接签字", "备份重要文件"]
+        },
+        {
+            "id": "rest",
+            "title": "早点休息，放松心情",
+            "category": "健康",
+            "days_before": 1,
+            "priority": "critical",
+            "description": "保证充足睡眠，为婚礼储备精力",
+            "checklist": ["提前完成所有事", "放松活动", "早睡", "吃清淡早餐"]
+        }
+    ],
+    "婚礼当天": [
+        {
+            "id": "wedding_day_breakfast",
+            "title": "早起洗漱、吃早餐",
+            "category": "流程",
+            "hours_before": 8,
+            "priority": "critical",
+            "description": "保持体力，简单早餐",
+            "checklist": ["起床洗漱", "吃早餐", "准备当天的物品", "化妆开始"]
+        },
+        {
+            "id": "bride_makeup",
+            "title": "新娘化妆、做发型",
+            "category": "美容",
+            "hours_before": 6,
+            "priority": "high",
+            "description": "化妆师到位，全程约2-3小时",
+            "checklist": ["准备化妆品", "做发型", "化妆", "更换婚纱", "拍摄化妆照"]
+        },
+        {
+            "id": "groom_grooming",
+            "title": "新郎剃须、做发型",
+            "category": "美容",
+            "hours_before": 6,
+            "priority": "medium",
+            "description": "新郎准备，可拍摄花絮",
+            "checklist": ["洗漱", "剃须", "做发型", "穿西装", "准备接亲"]
+        },
+        {
+            "id": "door_game",
+            "title": "接亲游戏（堵门、找鞋、敬茶）",
+            "category": "环节",
+            "hours_before": 4,
+            "priority": "high",
+            "description": "传统接亲环节，安排游戏、红包",
+            "checklist": ["准备游戏道具", "安排伴娘伴郎", "准备红包", "拍摄全程"]
+        },
+        {
+            "id": "tea_ceremony",
+            "title": "敬改口茶（收红包）",
+            "category": "环节",
+            "hours_before": 3,
+            "priority": "high",
+            "description": "向双方父母敬茶，改口收红包",
+            "checklist": ["准备茶具", "准备跪垫", "安排父母位置", "准备红包"]
+        },
+        {
+            "id": "departure",
+            "title": "新郎新娘出门、上车",
+            "category": "流程",
+            "hours_before": 2,
+            "priority": "medium",
+            "description": "新娘出门，婚车队伍出发",
+            "checklist": ["确认婚车路线", "撒花/彩带", "新娘上车", "车队出发"]
+        },
+        {
+            "id": "checkin",
+            "title": "迎宾/签到（引导宾客入座）",
+            "category": "流程",
+            "hours_before": 2,
+            "priority": "high",
+            "description": "在酒店门口迎宾，引导入座",
+            "checklist": ["签到台准备", "迎宾人员到位", "引导宾客", "发放伴手礼"]
+        },
+        {
+            "id": "ceremony",
+            "title": "婚礼仪式（入场、宣誓、交换戒指、抛花）",
+            "category": "环节",
+            "hours_before": 1,
+            "priority": "critical",
+            "description": "婚礼核心仪式环节",
+            "checklist": ["主持人到位", "音响设备", "戒指准备", "音乐播放", "全程摄影"]
+        },
+        {
+            "id": "wedding_banquet",
+            "title": "婚宴敬酒（按桌敬酒、致辞）",
+            "category": "环节",
+            "hours_before": 0,
+            "priority": "high",
+            "description": "新人逐桌敬酒、父母致辞",
+            "checklist": ["确定敬酒顺序", "准备致辞稿", "安排工作人员", "控制节奏"]
+        },
+        {
+            "id": "farewell",
+            "title": "送客/欢送宾客",
+            "category": "流程",
+            "hours_before": -1,
+            "priority": "medium",
+            "description": "婚礼结束，欢送客人",
+            "checklist": ["门口欢送", "发放伴手礼", "感谢宾客", "整理物品"]
+        },
+        {
+            "id": "settlement",
+            "title": "结算（酒店、供应商尾款）",
+            "category": "财务",
+            "hours_before": -2,
+            "priority": "critical",
+            "description": "支付所有尾款，取回收据",
+            "checklist": ["准备现金/转账", "逐项结算", "取回收据合同", "确认无误"]
+        }
+    ],
+    "婚礼后1周": [
+        {
+            "id": "thank_guests",
+            "title": "感谢宾客（发送感谢卡/微信）",
+            "category": "礼仪",
+            "days_after": 3,
+            "priority": "medium",
+            "description": "向出席的宾客表达感谢",
+            "checklist": ["整理宾客名单", "发送感谢信息", "微信/明信片"]
+        },
+        {
+            "id": "photo_backup",
+            "title": "整理婚礼照片/视频",
+            "category": "纪念",
+            "days_after": 5,
+            "priority": "low",
+            "description": "备份到云端，挑选精修",
+            "checklist": ["接收原片", "云端备份", "标记精选", "制作相册"]
+        },
+        {
+            "id": "vendor_review",
+            "title": "给供应商评价",
+            "category": "售后",
+            "days_after": 7,
+            "priority": "low",
+            "description": "在婚礼纪、小红书、大众点评等平台评价",
+            "checklist": ["列出所有供应商", "逐一评价", "上传照片"]
+        },
+        {
+            "id": "items_organize",
+            "title": "整理婚礼物品",
+            "category": "整理",
+            "days_after": 7,
+            "priority": "low",
+            "description": "婚纱、装饰品、剩余物品收纳",
+            "checklist": ["清洗婚纱", "收纳装饰", "处理剩余物资", "捐赠/转卖"]
+        },
+        {
+            "id": "final_settlement",
+            "title": "结算所有账单",
+            "category": "财务",
+            "days_after": 7,
+            "priority": "high",
+            "description": "核对所有发票、付款、报销",
+            "checklist": ["收集所有票据", "核对金额", "完成付款", "归档保存"]
+        }
+    ]
+}
+
+# 任务分类（用于筛选）
+TASK_CATEGORIES = [
+    "预算", "日程", "策划", "婚庆", "场地", "摄影", "摄像", "服装", "首饰",
+    "人员", "设备", "交通", "鲜花", "餐饮", "请柬", "礼品", "红包", "美容",
+    "彩排", "物资", "财务", "健康", "流程", "环节", "礼仪", "纪念", "售后",
+    "整理", "宾客", "婚房", "旅行", "其他"
+]
+
+# 预算分类常量
+BUDGET_CATEGORIES = [
+    "婚礼场地", "婚宴餐饮", "婚庆策划", "摄影", "摄像", "主持",
+    "化妆", "婚纱礼服", "新郎西装", "婚戒首饰", "鲜花布置", "灯光音响",
+    "婚车租赁", "请柬喜糖", "伴手礼", "其他费用"
+]
+
+# 优先级映射
+PRIORITY_MAP = {
+    'critical': {'label': '紧急', 'color': 'danger'},
+    'high': {'label': '高', 'color': 'warning'},
+    'medium': {'label': '中', 'color': 'info'},
+    'low': {'label': '低', 'color': 'secondary'}
+}
+
+def get_db():
+    db = getattr(g, '_database', None)
+    if db is None:
+        db = g._database = sqlite3.connect(app.config['DATABASE'])
+        db.row_factory = sqlite3.Row
+    return db
+
+@app.teardown_appcontext
+def close_connection(exception):
+    try:
+        db = getattr(g, '_database', None)
+        if db is not None:
+            db.close()
+    except:
+        pass
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# ==================== 全局上下文 ====================
+
+@app.context_processor
+def inject_context():
+    db = get_db()
+    
+    pending_tasks = db.execute(
+        "SELECT COUNT(*) FROM tasks WHERE status != 'completed'"
+    ).fetchone()[0] or 0
+    
+    unconfirmed_guests = db.execute(
+        "SELECT COUNT(*) FROM guests WHERE rsvp_status = 'no_response' OR rsvp_status = ''"
+    ).fetchone()[0] or 0
+    
+    wedding_date_row = db.execute(
+        "SELECT value FROM settings WHERE key='wedding_date'"
+    ).fetchone()
+    
+    wedding_date = None
+    if wedding_date_row:
+        try:
+            wedding_date = datetime.strptime(wedding_date_row[0], '%Y-%m-%d').date()
+        except:
+            wedding_date = None
+    
+    return {
+        'pending_tasks': pending_tasks,
+        'unconfirmed_guests': unconfirmed_guests,
+        'wedding_date': wedding_date,
+        'today': date.today(),
+        'task_categories': TASK_CATEGORIES,
+        'priority_map': PRIORITY_MAP
+    }
+
+# ==================== 数据库初始化 ====================
+
+def init_db():
+    with app.app_context():
+        db = get_db()
+        # settings表
+        db.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
+        db.execute('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', 
+                   ('wedding_date', (date.today() + timedelta(days=365)).isoformat()))
+        
+        # 任务表（支持内置reference）
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                category TEXT,
+                phase TEXT,
+                due_date DATE,
+                assigned_to TEXT,
+                status TEXT DEFAULT 'pending',
+                priority TEXT DEFAULT 'medium',
+                reference_id TEXT,  -- 关联内置事项ID
+                dependencies TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP
+            )
+        ''')
+        
+        # 预算表（保持不变）
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS budget (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                estimated_cost REAL,
+                actual_cost REAL,
+                deposit REAL DEFAULT 0,
+                balance REAL DEFAULT 0,
+                vendor TEXT,
+                vendor_contact TEXT,
+                contract_file TEXT,
+                status TEXT DEFAULT 'pending',
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 宾客表
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS guests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT,
+                email TEXT,
+                relationship TEXT,
+                side TEXT CHECK(side IN ('bride', 'groom', 'both')),
+                table_number INTEGER,
+                invitation_status TEXT DEFAULT 'pending',
+                rsvp_status TEXT DEFAULT 'no_response',
+                plus_one BOOLEAN DEFAULT 0,
+                dietary_restrictions TEXT,
+                gift_amount REAL,
+                notes TEXT
+            )
+        ''')
+        
+        # 供应商表
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS vendors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                contact_person TEXT,
+                phone TEXT,
+                email TEXT,
+                address TEXT,
+                price_range TEXT,
+                rating REAL,
+                notes TEXT,
+                contract_date DATE,
+                contract_file TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 灵感板表
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS moodboard (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                category TEXT,
+                image_url TEXT,
+                tags TEXT,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 桌席安排表
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS tables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                table_number INTEGER NOT NULL,
+                table_name TEXT,
+                shape TEXT DEFAULT 'round',
+                capacity INTEGER DEFAULT 10,
+                x_coordinate REAL,
+                y_coordinate REAL,
+                notes TEXT
+            )
+        ''')
+        
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS guest_tables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guest_id INTEGER NOT NULL,
+                table_id INTEGER NOT NULL,
+                seat_number INTEGER,
+                notes TEXT,
+                FOREIGN KEY (guest_id) REFERENCES guests (id) ON DELETE CASCADE,
+                FOREIGN KEY (table_id) REFERENCES tables (id) ON DELETE CASCADE,
+                UNIQUE(guest_id, table_id, seat_number)
+            )
+        ''')
+        
+        db.commit()
+
+# ==================== 任务管理（重构） ====================
+
+@app.route('/')
+def dashboard():
+    db = get_db()
+    total_tasks = db.execute('SELECT COUNT(*) FROM tasks').fetchone()[0]
+    completed_tasks = db.execute("SELECT COUNT(*) FROM tasks WHERE status='completed'").fetchone()[0]
+    
+    # 待办任务（按优先级分类）
+    urgent_tasks_raw = db.execute("""
+        SELECT * FROM tasks 
+        WHERE status != 'completed' 
+        AND priority = 'critical' 
+        AND due_date <= date('now', '+7 days')
+        ORDER BY due_date ASC LIMIT 5
+    """).fetchall()
+    
+    # 转换为字典并处理日期
+    urgent_tasks = []
+    for task in urgent_tasks_raw:
+        task_dict = dict(task)
+        if task_dict['due_date']:
+            try:
+                task_dict['due_date'] = datetime.strptime(task_dict['due_date'], '%Y-%m-%d').date()
+            except:
+                pass
+        urgent_tasks.append(task_dict)
+    
+    # 即将到期任务
+    upcoming_raw = db.execute('''
+        SELECT * FROM tasks 
+        WHERE status != 'completed' 
+        AND due_date <= date('now', '+7 days')
+        AND priority != 'critical'
+        ORDER BY due_date ASC LIMIT 5
+    ''').fetchall()
+    
+    upcoming = []
+    for task in upcoming_raw:
+        task_dict = dict(task)
+        if task_dict['due_date']:
+            try:
+                task_dict['due_date'] = datetime.strptime(task_dict['due_date'], '%Y-%m-%d').date()
+            except:
+                pass
+        upcoming.append(task_dict)
+    
+    # 按分类统计
+    task_stats_raw = db.execute('''
+        SELECT category, status, COUNT(*) as count 
+        FROM tasks 
+        GROUP BY category, status
+        ORDER BY category, status
+    ''').fetchall()
+    
+    # 整理统计数据（转换为列表，便于前端JSON序列化）
+    stats_by_cat = {}
+    for row in task_stats_raw:
+        cat = row['category'] or '未分类'
+        if cat not in stats_by_cat:
+            stats_by_cat[cat] = {'total': 0, 'completed': 0}
+        stats_by_cat[cat]['total'] += row['count']
+        if row['status'] == 'completed':
+            stats_by_cat[cat]['completed'] += row['count']
+    
+    task_stats_list = []
+    for cat, data in stats_by_cat.items():
+        task_stats_list.append({
+            'category': cat,
+            'total': data['total'],
+            'completed': data['completed']
+        })
+    
+    # 计算需要的任务数
+    needed_tasks = db.execute('SELECT COUNT(*) FROM tasks WHERE is_needed = 1').fetchone()[0] or 0
+    
+    return render_template('dashboard.html',
+                         total_tasks=total_tasks,
+                         completed_tasks=completed_tasks,
+                         needed_tasks=needed_tasks,
+                         urgent_tasks=urgent_tasks,
+                         upcoming=upcoming,
+                         task_stats=task_stats_list)
+
+@app.route('/tasks')
+def tasks():
+    db = get_db()
+    
+    # 筛选参数
+    phase = request.args.get('phase')
+    category = request.args.get('category')
+    status = request.args.get('status')
+    priority = request.args.get('priority')
+    
+    query = 'SELECT * FROM tasks WHERE 1=1'
+    params = []
+    
+    if phase:
+        query += ' AND phase=?'
+        params.append(phase)
+    if category:
+        query += ' AND category=?'
+        params.append(category)
+    if status:
+        query += ' AND status=?'
+        params.append(status)
+    if priority:
+        query += ' AND priority=?'
+        params.append(priority)
+    
+    query += ' ORDER BY CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, due_date ASC, priority DESC'
+    tasks_raw = db.execute(query, params).fetchall()
+    
+    # 将 Row 对象转换为字典并处理日期
+    tasks_list = []
+    for task in tasks_raw:
+        task_dict = dict(task)
+        # 将 due_date 字符串转换为 date 对象，避免模板中比较错误
+        if task_dict['due_date']:
+            try:
+                task_dict['due_date'] = datetime.strptime(task_dict['due_date'], '%Y-%m-%d').date()
+            except:
+                pass  # 保持原值
+        tasks_list.append(task_dict)
+    
+    # 获取所有阶段（从 WEDDING_CHECKLIST）
+    phases = list(WEDDING_CHECKLIST.keys())
+    
+    # 获取已使用的分类
+    used_categories = db.execute(
+        'SELECT DISTINCT category FROM tasks WHERE category IS NOT NULL'
+    ).fetchall()
+    categories = [row['category'] for row in used_categories]
+    
+    # 计算需要的任务数
+    needed_tasks = db.execute('SELECT COUNT(*) FROM tasks WHERE is_needed = 1').fetchone()[0] or 0
+    completed_tasks = db.execute("SELECT COUNT(*) FROM tasks WHERE status='completed'").fetchone()[0] or 0
+    
+    return render_template('tasks.html', 
+                         tasks=tasks_list, 
+                         phases=phases,
+                         categories=categories,
+                         needed_tasks=needed_tasks,
+                         completed_tasks=completed_tasks,
+                         selected_phase=phase,
+                         selected_category=category,
+                         selected_status=status,
+                         selected_priority=priority)
+
+@app.route('/tasks/<int:task_id>/toggle-needed', methods=['POST'])
+def toggle_needed(task_id):
+    """切换任务的 is_needed 状态"""
+    db = get_db()
+    
+    # 获取任务
+    task = db.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    if not task:
+        return jsonify({'success': False, 'error': '任务不存在'}), 404
+    
+    # 解析JSON请求
+    data = request.get_json()
+    if not data or 'is_needed' not in data:
+        return jsonify({'success': False, 'error': '缺少参数'}), 400
+    
+    is_needed = 1 if data['is_needed'] else 0
+    
+    # 更新
+    db.execute('UPDATE tasks SET is_needed = ? WHERE id = ?', (is_needed, task_id))
+    db.commit()
+    
+    return jsonify({'success': True})
+
+@app.route('/tasks/create', methods=['GET', 'POST'])
+def create_task():
+    if request.method == 'POST':
+        db = get_db()
+        db.execute('''
+            INSERT INTO tasks (title, description, category, phase, due_date, assigned_to, priority, reference_id, is_needed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            request.form['title'],
+            request.form.get('description', ''),
+            request.form.get('category', '其他'),
+            request.form.get('phase', '未分类'),
+            request.form.get('due_date'),
+            request.form.get('assigned_to', ''),
+            request.form.get('priority', 'medium'),
+            request.form.get('reference_id', ''),
+            1  # 默认是需要
+        ))
+        db.commit()
+        flash('任务创建成功！', 'success')
+        return redirect(url_for('tasks'))
+    
+    return render_template('task_form.html', 
+                         phases=list(WEDDING_CHECKLIST.keys()),
+                         categories=TASK_CATEGORIES,
+                         checklist_items=WEDDING_CHECKLIST)
+
+@app.route('/tasks/import-template', methods=['POST'])
+def import_template():
+    """从内置模板导入任务"""
+    phase = request.form.get('phase')
+    wedding_date_str = request.form.get('wedding_date') or request.args.get('wedding_date')
+    
+    if phase not in WEDDING_CHECKLIST:
+        flash('无效的阶段', 'error')
+        return redirect(url_for('tasks'))
+    
+    # 获取婚礼日期
+    db = get_db()
+    if wedding_date_str:
+        try:
+            wedding_date = datetime.strptime(wedding_date_str, '%Y-%m-%d').date()
+        except:
+            flash('婚礼日期格式错误', 'error')
+            return redirect(url_for('tasks'))
+    else:
+        wedding_date_row = db.execute(
+            "SELECT value FROM settings WHERE key='wedding_date'"
+        ).fetchone()
+        if wedding_date_row:
+            try:
+                wedding_date = datetime.strptime(wedding_date_row[0], '%Y-%m-%d').date()
+            except:
+                wedding_date = None
+        else:
+            wedding_date = None
+    
+    if not wedding_date:
+        flash('请先设置婚礼日期，或在上方选择婚礼日期后再导入模板', 'error')
+        return redirect(url_for('tasks'))
+    
+    # 导入模板任务
+    count = 0
+    for task_template in WEDDING_CHECKLIST[phase]:
+        days_before = task_template.get('days_before', 0)
+        due_date = wedding_date + timedelta(days=days_before)
+        
+        # 检查是否已存在相同reference的任务
+        existing = db.execute(
+            'SELECT id FROM tasks WHERE reference_id=? AND phase=?',
+            (task_template['id'], phase)
+        ).fetchone()
+        
+        if not existing:
+            db.execute('''
+                INSERT INTO tasks (title, description, category, phase, due_date, priority, reference_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                task_template['title'],
+                task_template.get('description', ''),
+                task_template.get('category', '通用'),
+                phase,
+                due_date.isoformat(),
+                task_template.get('priority', 'medium'),
+                task_template['id']
+            ))
+            count += 1
+    
+    db.commit()
+    flash(f'已从模板导入 {count} 个任务到「{phase}」阶段', 'success')
+    return redirect(url_for('tasks'))
+
+@app.route('/tasks/<int:task_id>/complete')
+def complete_task(task_id):
+    db = get_db()
+    db.execute("UPDATE tasks SET status='completed', completed_at=CURRENT_TIMESTAMP WHERE id=?", (task_id,))
+    db.commit()
+    flash('任务已完成！', 'success')
+    return redirect(request.referrer or url_for('tasks'))
+
+@app.route('/tasks/<int:task_id>/delete')
+def delete_task(task_id):
+    db = get_db()
+    db.execute('DELETE FROM tasks WHERE id=?', (task_id,))
+    db.commit()
+    flash('任务已删除', 'info')
+    return redirect(request.referrer or url_for('tasks'))
+
+# ==================== 预算管理（修复） ====================
+
+@app.route('/budget')
+def budget():
+    db = get_db()
+    category_filter = request.args.get('category')
+    query = 'SELECT * FROM budget WHERE 1=1'
+    params = []
+    
+    if category_filter:
+        query += ' AND category=?'
+        params.append(category_filter)
+    
+    query += ' ORDER BY category, item_name'
+    items = db.execute(query, params).fetchall()
+    
+    summary = db.execute('''
+        SELECT category, 
+               SUM(estimated_cost) as est_total,
+               SUM(actual_cost) as act_total,
+               SUM(deposit) as deposit_total
+        FROM budget 
+        GROUP BY category
+        ORDER BY est_total DESC
+    ''').fetchall()
+    
+    total_est = sum(row['est_total'] for row in summary if row['est_total']) or 0
+    total_act = sum(row['act_total'] for row in summary if row['act_total']) or 0
+    
+    return render_template('budget.html', 
+                         items=items, 
+                         summary=summary, 
+                         total_est=total_est, 
+                         actual_spent=total_act,
+                         categories=BUDGET_CATEGORIES,
+                         selected_category=category_filter)
+
+@app.route('/budget/create', methods=['GET', 'POST'])
+def create_budget():
+    if request.method == 'POST':
+        db = get_db()
+        db.execute('''
+            INSERT INTO budget (category, item_name, estimated_cost, actual_cost, 
+                              deposit, balance, vendor, vendor_contact, status, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            request.form['category'], request.form['item_name'],
+            float(request.form.get('estimated_cost') or 0),
+            float(request.form.get('actual_cost') or 0),
+            float(request.form.get('deposit') or 0),
+            float(request.form.get('balance') or 0),
+            request.form.get('vendor', ''), request.form.get('vendor_contact', ''),
+            request.form.get('status', 'pending'), request.form.get('notes', '')
+        ))
+        db.commit()
+        flash('预算条目已添加', 'success')
+        return redirect(url_for('budget'))
+    return render_template('budget_form.html', categories=BUDGET_CATEGORIES)
+
+@app.route('/budget/<int:item_id>/update', methods=['POST'])
+def update_budget(item_id):
+    db = get_db()
+    db.execute('''
+        UPDATE budget SET actual_cost=?, status=?, notes=? WHERE id=?
+    ''', (
+        float(request.form.get('actual_cost') or 0),
+        request.form.get('status', 'pending'),
+        request.form.get('notes', ''),
+        item_id
+    ))
+    db.commit()
+    flash('预算已更新', 'success')
+    return redirect(url_for('budget'))
+
+@app.route('/budget/<int:budget_id>/edit', methods=['GET', 'POST'])
+def edit_budget(budget_id):
+    db = get_db()
+    
+    if request.method == 'POST':
+        db.execute('''
+            UPDATE budget 
+            SET category = ?, item_name = ?, estimated_cost = ?, actual_cost = ?,
+                deposit = ?, balance = ?, vendor = ?, vendor_contact = ?, status = ?, notes = ?
+            WHERE id = ?
+        ''', (
+            request.form['category'], request.form['item_name'],
+            float(request.form.get('estimated_cost') or 0),
+            float(request.form.get('actual_cost') or 0),
+            float(request.form.get('deposit') or 0),
+            float(request.form.get('balance') or 0),
+            request.form.get('vendor', ''), request.form.get('vendor_contact', ''),
+            request.form.get('status', 'pending'), request.form.get('notes', ''),
+            budget_id
+        ))
+        db.commit()
+        flash('预算条目已更新', 'success')
+        return redirect(url_for('budget'))
+    
+    # GET: 获取预算信息
+    budget = db.execute('SELECT * FROM budget WHERE id = ?', (budget_id,)).fetchone()
+    if not budget:
+        flash('预算条目不存在', 'error')
+        return redirect(url_for('budget'))
+    
+    return render_template('budget_form.html', budget=dict(budget), categories=BUDGET_CATEGORIES)
+
+# ==================== 宾客管理（保持不变） ====================
+
+@app.route('/guests')
+def guests():
+    db = get_db()
+    side = request.args.get('side')
+    status = request.args.get('rsvp_status')
+    
+    query = 'SELECT * FROM guests WHERE 1=1'
+    params = []
+    
+    if side:
+        query += ' AND side=?'
+        params.append(side)
+    if status:
+        query += ' AND rsvp_status=?'
+        params.append(status)
+    
+    query += ' ORDER BY name'
+    guest_list = db.execute(query, params).fetchall()
+    guest_list = [dict(row) for row in guest_list]
+    
+    stats = {
+        'total': db.execute('SELECT COUNT(*) FROM guests').fetchone()[0],
+        'bride_side': db.execute("SELECT COUNT(*) FROM guests WHERE side='bride'").fetchone()[0],
+        'groom_side': db.execute("SELECT COUNT(*) FROM guests WHERE side='groom'").fetchone()[0],
+        'confirmed': db.execute("SELECT COUNT(*) FROM guests WHERE rsvp_status='yes'").fetchone()[0],
+        'pending': db.execute("SELECT COUNT(*) FROM guests WHERE rsvp_status='no_response'").fetchone()[0],
+    }
+    
+    return render_template('guests.html', guests=guest_list, stats=stats)
+
+@app.route('/guests/create', methods=['GET', 'POST'])
+def create_guest():
+    if request.method == 'POST':
+        db = get_db()
+        db.execute('''
+            INSERT INTO guests (name, phone, email, relationship, side, 
+                              table_number, invitation_status, rsvp_status, 
+                              plus_one, dietary_restrictions, gift_amount, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            request.form['name'], request.form.get('phone', ''), request.form.get('email', ''),
+            request.form.get('relationship', ''), request.form.get('side', 'both'),
+            int(request.form.get('table_number') or 0), request.form.get('invitation_status', 'pending'),
+            request.form.get('rsvp_status', 'no_response'), 
+            1 if request.form.get('plus_one') else 0,
+            request.form.get('dietary_restrictions', ''), 
+            float(request.form.get('gift_amount') or 0),
+            request.form.get('notes', '')
+        ))
+        db.commit()
+        flash('宾客已添加', 'success')
+        return redirect(url_for('guests'))
+    
+    return render_template('guest_form.html')
+
+@app.route('/guests/<int:guest_id>/edit', methods=['GET', 'POST'])
+def edit_guest(guest_id):
+    db = get_db()
+    
+    if request.method == 'POST':
+        db.execute('''
+            UPDATE guests 
+            SET name = ?, phone = ?, email = ?, relationship = ?, side = ?,
+                table_number = ?, invitation_status = ?, rsvp_status = ?,
+                plus_one = ?, dietary_restrictions = ?, gift_amount = ?, notes = ?
+            WHERE id = ?
+        ''', (
+            request.form['name'], request.form.get('phone', ''), request.form.get('email', ''),
+            request.form.get('relationship', ''), request.form.get('side', 'both'),
+            int(request.form.get('table_number') or 0), request.form.get('invitation_status', 'pending'),
+            request.form.get('rsvp_status', 'no_response'), 
+            1 if request.form.get('plus_one') else 0,
+            request.form.get('dietary_restrictions', ''), 
+            float(request.form.get('gift_amount') or 0),
+            request.form.get('notes', ''),
+            guest_id
+        ))
+        db.commit()
+        flash('宾客信息已更新', 'success')
+        return redirect(url_for('guests'))
+    
+    # GET: 获取宾客信息填充表单
+    guest = db.execute('SELECT * FROM guests WHERE id = ?', (guest_id,)).fetchone()
+    if not guest:
+        flash('宾客不存在', 'error')
+        return redirect(url_for('guests'))
+    
+    return render_template('guest_form.html', guest=dict(guest))
+
+@app.route('/guests/import', methods=['GET', 'POST'])
+def import_guests():
+    if request.method == 'POST':
+        file = request.files.get('file')
+        if file and file.filename.endswith('.csv'):
+            import csv, io
+            db = get_db()
+            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+            reader = csv.DictReader(stream)
+            count = 0
+            for row in reader:
+                db.execute('''
+                    INSERT INTO guests (name, phone, email, relationship, side, notes)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (
+                    row.get('name', ''), row.get('phone', ''), row.get('email', ''), 
+                    row.get('relationship', ''), row.get('side', 'both'), 
+                    row.get('notes', '')
+                ))
+                count += 1
+            db.commit()
+            flash(f'成功导入 {count} 位宾客', 'success')
+            return redirect(url_for('guests'))
+        flash('请上传CSV文件', 'error')
+    
+    return render_template('guest_import.html')
+
+@app.route('/guests/export')
+def export_guests():
+    db = get_db()
+    guests = db.execute('SELECT * FROM guests ORDER BY name').fetchall()
+    guests = [dict(row) for row in guests]
+    
+    import csv, io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['姓名', '电话', '邮箱', '关系', '所属方', '桌号', 
+                     '邀请状态', 'RSVP状态', '是否带伴', '饮食禁忌', '礼金', '备注'])
+    for g in guests:
+        writer.writerow([
+            g['name'], g['phone'], g['email'], g['relationship'],
+            g['side'], g['table_number'], g['invitation_status'],
+            g['rsvp_status'], '是' if g['plus_one'] else '否',
+            g['dietary_restrictions'], g['gift_amount'], g['notes']
+        ])
+    
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8-sig')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'wedding_guests_{date.today().strftime("%Y%m%d")}.csv'
+    )
+
+# ==================== 供应商管理 ====================
+
+@app.route('/vendors')
+def vendors():
+    db = get_db()
+    category = request.args.get('category')
+    query = 'SELECT * FROM vendors WHERE 1=1'
+    params = []
+    if category:
+        query += ' AND category=?'
+        params.append(category)
+    query += ' ORDER BY rating DESC, name'
+    vendor_list = db.execute(query, params).fetchall()
+    vendor_list = [dict(row) for row in vendor_list]
+    
+    categories = db.execute('SELECT DISTINCT category FROM vendors').fetchall()
+    categories = [row['category'] for row in categories]
+    
+    return render_template('vendors.html', vendors=vendor_list, categories=categories)
+
+@app.route('/vendors/create', methods=['GET', 'POST'])
+def create_vendor():
+    if request.method == 'POST':
+        db = get_db()
+        db.execute('''
+            INSERT INTO vendors (name, category, contact_person, phone, email, 
+                               address, price_range, rating, notes, contract_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            request.form['name'], request.form['category'], 
+            request.form.get('contact_person', ''),
+            request.form.get('phone', ''), request.form.get('email', ''),
+            request.form.get('address', ''), request.form.get('price_range', ''),
+            float(request.form.get('rating') or 0), 
+            request.form.get('notes', ''), 
+            request.form.get('contract_date')
+        ))
+        db.commit()
+        flash('供应商已添加', 'success')
+        return redirect(url_for('vendors'))
+    return render_template('vendor_form.html')
+
+# ==================== 灵感板 ====================
+
+@app.route('/moodboard')
+def moodboard():
+    db = get_db()
+    category = request.args.get('category')
+    query = 'SELECT * FROM moodboard WHERE 1=1'
+    params = []
+    if category:
+        query += ' AND category=?'
+        params.append(category)
+    query += ' ORDER BY created_at DESC'
+    items = db.execute(query, params).fetchall()
+    items = [dict(row) for row in items]
+    
+    categories = db.execute('SELECT DISTINCT category FROM moodboard WHERE category IS NOT NULL').fetchall()
+    categories = [row['category'] for row in categories]
+    
+    return render_template('moodboard.html', items=items, categories=categories)
+
+@app.route('/moodboard/create', methods=['GET', 'POST'])
+def create_moodboard():
+    if request.method == 'POST':
+        image_url = ''
+        if 'image' in request.files:
+            file = request.files['image']
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"{timestamp}_{filename}"
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                image_url = f"/static/images/{filename}"
+        
+        db = get_db()
+        db.execute('''
+            INSERT INTO moodboard (title, category, image_url, tags, notes)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            request.form['title'], 
+            request.form.get('category', '未分类'), 
+            image_url, 
+            request.form.get('tags', ''), 
+            request.form.get('notes', '')
+        ))
+        db.commit()
+        flash('灵感已保存', 'success')
+        return redirect(url_for('moodboard'))
+    
+    return render_template('moodboard_form.html')
+
+# ==================== 设置 Wedding Date ====================
+
+@app.route('/settings/wedding-date', methods=['GET', 'POST'])
+def set_wedding_date():
+    if request.method == 'POST':
+        wedding_date = request.form.get('wedding_date')
+        if not wedding_date:
+            flash('请选择婚礼日期', 'error')
+            return redirect(url_for('set_wedding_date'))
+        
+        db = get_db()
+        db.execute('REPLACE INTO settings (key, value) VALUES (?, ?)', 
+                   ('wedding_date', wedding_date))
+        db.commit()
+        flash('婚礼日期已设置成功！', 'success')
+        return redirect(url_for('dashboard'))
+    
+    db = get_db()
+    wedding_date_row = db.execute(
+        "SELECT value FROM settings WHERE key='wedding_date'"
+    ).fetchone()
+    
+    current_date = wedding_date_row[0] if wedding_date_row else ''
+    
+    return render_template('wedding_date_form.html', current_date=current_date)
+
+# ==================== 桌席可视化管理（修复版） ====================
+
+@app.route('/seating')
+def seating_chart():
+    """可视化座位图"""
+    db = get_db()
+    
+    tables = db.execute('SELECT * FROM tables ORDER BY table_number').fetchall()
+    tables = [dict(row) for row in tables]
+    
+    # 获取已安排座位的宾客
+    seated_guests = db.execute('''
+        SELECT g.id, g.name, g.relationship, g.side, gt.seat_number, t.table_number as tbl_num
+        FROM guests g
+        JOIN guest_tables gt ON g.id = gt.guest_id
+        JOIN tables t ON gt.table_id = t.id
+        ORDER BY t.table_number, gt.seat_number
+    ''').fetchall()
+    
+    # 按桌分组
+    seating_data = {}
+    for guest in seated_guests:
+        guest_dict = dict(guest)
+        table_key = str(guest['tbl_num'])
+        if table_key not in seating_data:
+            seating_data[table_key] = []
+        seating_data[table_key].append(guest_dict)
+    
+    # 获取所有未安排座位或需要查看的宾客
+    all_guests = db.execute('''
+        SELECT g.* FROM guests g 
+        LEFT JOIN guest_tables gt ON g.id = gt.guest_id 
+        WHERE gt.id IS NULL OR gt.id IS NULL
+        ORDER BY g.name
+    ''').fetchall()
+    all_guests = [dict(row) for row in all_guests]
+    
+    return render_template('seating_chart.html', 
+                         tables=tables, 
+                         seating_data=seating_data,
+                         all_guests=all_guests)
+
+@app.route('/seating/api/tables', methods=['POST'])
+def api_seating_create_table():
+    db = get_db()
+    data = request.get_json()
+    
+    table_number = data.get('table_number')
+    table_name = data.get('table_name', f'桌{table_number}')
+    shape = data.get('shape', 'round')
+    capacity = data.get('capacity', 10)
+    
+    existing = db.execute('SELECT id FROM tables WHERE table_number=?', (table_number,)).fetchone()
+    if existing:
+        return jsonify({'status': 'error', 'message': f'桌号 {table_number} 已存在'}), 400
+    
+    db.execute('''
+        INSERT INTO tables (table_number, table_name, shape, capacity)
+        VALUES (?, ?, ?, ?)
+    ''', (table_number, table_name, shape, capacity))
+    db.commit()
+    
+    return jsonify({'status': 'success', 'message': f'已创建 {table_name}'})
+
+@app.route('/seating/api/arrange', methods=['POST'])
+def api_seating_arrange():
+    db = get_db()
+    data = request.get_json()
+    
+    guest_id = data.get('guest_id')
+    table_id = data.get('table_id')
+    seat_number = data.get('seat_number')
+    
+    if not guest_id or not table_id:
+        return jsonify({'status': 'error', 'message': '参数不全'}), 400
+    
+    # 检查桌位容量
+    table = db.execute('SELECT capacity FROM tables WHERE id=?', (table_id,)).fetchone()
+    if table:
+        current_count = db.execute(
+            'SELECT COUNT(*) FROM guest_tables WHERE table_id=?', 
+            (table_id,)
+        ).fetchone()[0]
+        if current_count >= table['capacity']:
+            return jsonify({'status': 'error', 'message': '该桌已满'}), 400
+    
+    # 移除该宾客旧座位
+    db.execute('DELETE FROM guest_tables WHERE guest_id=?', (guest_id,))
+    
+    # 安排新座位
+    db.execute('''
+        INSERT INTO guest_tables (guest_id, table_id, seat_number)
+        VALUES (?, ?, ?)
+    ''', (guest_id, table_id, seat_number))
+    
+    db.commit()
+    return jsonify({'status': 'success', 'message': '座位已安排'})
+
+@app.route('/seating/api/remove/<int:guest_id>', methods=['POST'])
+def api_seating_remove_guest(guest_id):
+    db = get_db()
+    db.execute('DELETE FROM guest_tables WHERE guest_id=?', (guest_id,))
+    db.commit()
+    return jsonify({'status': 'success', 'message': '已移除座位'})
+
+@app.route('/seating/api/clear/<int:table_id>', methods=['POST'])
+def api_seating_clear_table(table_id):
+    db = get_db()
+    db.execute('DELETE FROM guest_tables WHERE table_id=?', (table_id,))
+    db.commit()
+    return jsonify({'status': 'success', 'message': '已清空该桌'})
+
+@app.route('/seating/export')
+def seating_export():
+    db = get_db()
+    data = db.execute('''
+        SELECT t.table_number, t.table_name, g.name, g.relationship, g.phone, gt.seat_number
+        FROM tables t
+        LEFT JOIN guest_tables gt ON t.id = gt.table_id
+        LEFT JOIN guests g ON gt.guest_id = g.id
+        WHERE g.id IS NOT NULL
+        ORDER BY t.table_number, gt.seat_number
+    ''').fetchall()
+    
+    import csv, io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['桌号', '桌名', '座位号', '宾客姓名', '关系', '电话'])
+    for row in data:
+        writer.writerow([row['table_number'], row['table_name'], row['seat_number'], 
+                        row['name'], row['relationship'], row['phone']])
+    
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8-sig')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'seating_chart_{date.today().strftime("%Y%m%d")}.csv'
+    )
+
+if __name__ == '__main__':
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    init_db()
+    print("Wedding Planner 启动中...")
+    print(f"数据库: {app.config['DATABASE']}")
+    print(f"预设流程阶段: {len(WEDDING_CHECKLIST)} 个")
+    app.run(debug=True, host='0.0.0.0', port=5000)

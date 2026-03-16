@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4><i class="bi bi-people me-2 text-pink"></i>宾客</h4>
+    <div>
+        <a href="{{ url_for('create_guest') }}" class="btn btn-primary btn-sm me-2">
+            <i class="bi bi-plus-lg me-1"></i>添加
+        </a>
+        <a href="{{ url_for('export_guests') }}" class="btn btn-outline-success btn-sm">
+            <i class="bi bi-download me-1"></i>导出
+        </a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-2 text-center">
+            <div class="col-4">
+                <div class="stat-card">
+                    <h5>{{ stats.total|default(0) }}</h5>
+                    <small>总人数</small>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stat-card">
+                    <h5 class="text-success">{{ stats.confirmed|default(0) }}</h5>
+                    <small>已确认</small>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stat-card">
+                    <h5 class="text-warning">{{ stats.pending|default(0) }}</h5>
+                    <small>待回复</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        {% if guests %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>姓名</th>
+                        <th>关系</th>
+                        <th>电话</th>
+                        <th>所属</th>
+                        <th>邀请状态</th>
+                        <th>RSVP</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for guest in guests %}
+                    <tr>
+                        <td>{{ guest.name }}</td>
+                        <td>{{ guest.relationship }}</td>
+                        <td>{{ guest.phone or '-' }}</td>
+                        <td>
+                            {% if guest.side == 'bride' %}
+                            <span class="badge bg-pink-light">女方</span>
+                            {% elif guest.side == 'groom' %}
+                            <span class="badge bg-info">男方</span>
+                            {% else %}
+                            <span class="badge bg-light text-dark">双方</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if guest.invitation_status == 'sent' %}
+                            <span class="badge bg-success">已发送</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">待发送</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if guest.rsvp_status == 'yes' %}
+                            <span class="badge bg-success">参加</span>
+                            {% elif guest.rsvp_status == 'no' %}
+                            <span class="badge bg-danger">不参加</span>
+                            {% else %}
+                            <span class="badge bg-light text-dark">未回复</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('edit_guest', guest_id=guest.id) }}" class="btn btn-sm btn-outline-secondary">编辑</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-people text-muted" style="font-size: 3rem;"></i>
+            <p class="text-muted mt-3 mb-0">暂无宾客数据</p>
+            <a href="{{ url_for('import_guests') }}" class="btn btn-primary btn-sm mt-2">导入CSV</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}添加灵感 - 备婚大作战{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h4 class="mb-0"><i class="bi bi-palette me-2"></i>添加灵感</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">标题 <span class="text-danger">*</span></label>
+                        <input type="text" name="title" class="form-control" required>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">分类</label>
+                            <select name="category" class="form-select">
+                                <option value="色彩搭配">色彩搭配</option>
+                                <option value="婚礼布置">婚礼布置</option>
+                                <option value="婚纱造型">婚纱造型</option>
+                                <option value="手捧花">手捧花</option>
+                                <option value="桌花">桌花</option>
+                                <option value="灯光设计">灯光设计</option>
+                                <option value="甜品蛋糕">甜品蛋糕</option>
+                                <option value="请柬设计">请柬设计</option>
+                                <option value="其他">其他</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">标签 (用逗号分隔)</label>
+                            <input type="text" name="tags" class="form-control" placeholder="如：简约、森系、粉色">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">上传图片</label>
+                        <input type="file" name="image" class="form-control" accept="image/*">
+                        <small class="text-muted">支持 PNG, JPG, GIF 格式，最大16MB</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">备注/想法</label>
+                        <textarea name="notes" class="form-control" rows="4" 
+                                  placeholder="记录你的想法、链接、供应商信息..."></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('moodboard') }}" class="btn btn-outline-secondary">返回灵感板</a>
+                        <button type="submit" class="btn btn-primary">保存灵感</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

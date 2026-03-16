@@ -1,0 +1,19 @@
+Wedding Planner 启动中...
+数据库: /home/in1t/.openclaw/workspace/wedding-planner/data/wedding.db
+预设流程阶段: 8 个
+ * Serving Flask app 'app'
+ * Debug mode: on
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.238.128:5000
+[33mPress CTRL+C to quit[0m
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 549-454-263
+127.0.0.1 - - [16/Mar/2026 16:08:17] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [16/Mar/2026 16:08:28] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [16/Mar/2026 16:08:39] "[32mGET / HTTP/1.1[0m" 302 -
+127.0.0.1 - - [16/Mar/2026 16:08:48] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [16/Mar/2026 16:08:57] "[33mPOST /login_route HTTP/1.1[0m" 404 -
+127.0.0.1 - - [16/Mar/2026 16:08:57] "[32mGET / HTTP/1.1[0m" 302 -

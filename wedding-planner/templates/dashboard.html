@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <i class="bi bi-flag-fill text-pink mb-2" style="font-size: 1.5rem; opacity: 0.7;"></i>
+            <h3>{{ total_tasks }}</h3>
+            <small>总任务</small>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <i class="bi bi-check-circle-fill text-success mb-2" style="font-size: 1.5rem; opacity: 0.7;"></i>
+            <h3 class="text-success">{{ completed_tasks }}</h3>
+            <small>已完成</small>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <i class="bi bi-lightning-fill text-pink mb-2" style="font-size: 1.5rem; opacity: 0.7;"></i>
+            <h3 class="text-pink">{{ needed_tasks|default(0) }}</h3>
+            <small>需要执行</small>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <i class="bi bi-graph-up-fill text-info mb-2" style="font-size: 1.5rem; opacity: 0.7;"></i>
+            <h3>{{ "%.0f"|format(completed_tasks / total_tasks * 100) if total_tasks else 0 }}%</h3>
+            <small>完成率</small>
+        </div>
+    </div>
+</div>
+
+<!-- 紧急任务 -->
+{% if urgent_tasks %}
+<div class="card mb-4" style="border-left: 4px solid var(--danger);">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0 text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>紧急待办 ({{ urgent_tasks|length }})</h6>
+            <a href="{{ url_for('tasks') }}" class="btn btn-sm btn-outline-secondary">查看全部</a>
+        </div>
+        <div class="row g-2">
+            {% for task in urgent_tasks %}
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center bg-white rounded-pill px-3 py-2" style="border: 1px solid var(--border);">
+                    <span class="small">{{ task.title|truncate(22) }}</span>
+                    <span class="badge bg-danger">{{ task.due_date }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 快速操作 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="card-title mb-3"><i class="bi bi-lightning-charge me-2 text-pink"></i>快速操作</h6>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('tasks') }}?phase=18-12个月" class="btn btn-sm btn-outline-primary">早期规划</a>
+            <a href="{{ url_for('tasks') }}?phase=12-9个月" class="btn btn-sm btn-outline-primary">中期预订</a>
+            <a href="{{ url_for('tasks') }}?phase=9-6个月" class="btn btn-sm btn-outline-primary">后期准备</a>
+            <a href="{{ url_for('tasks') }}?phase=6-3个月" class="btn btn-sm btn-outline-primary">婚前3-6月</a>
+            <a href="{{ url_for('tasks') }}?phase=3-1个月" class="btn btn-sm btn-outline-primary">最后冲刺</a>
+            <a href="{{ url_for('create_task') }}" class="btn btn-sm btn-primary">
+                <i class="bi bi-plus-lg me-1"></i>新建任务
+            </a>
+            <a href="{{ url_for('seating') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-grid-3x3-gap me-1"></i>桌席安排
+            </a>
+            <a href="{{ url_for('budget') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-calculator me-1"></i>预算管理
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- 近期任务（可折叠） -->
+<div class="card">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#recentTasks">
+        <h6 class="mb-0"><i class="bi bi-clock me-2"></i>近期任务（接下来7天）</h6>
+        <i class="bi bi-chevron-down"></i>
+    </div>
+    <div class="collapse show" id="recentTasks">
+        <div class="card-body">
+            {% if upcoming %}
+                {% for task in upcoming %}
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                    <div>
+                        <span class="badge phase-badge me-1">{{ task.phase }}</span>
+                        <strong>{{ task.title }}</strong>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        {% if task.priority == 'critical' %}
+                        <span class="badge bg-danger me-2">紧急</span>
+                        {% elif task.priority == 'high' %}
+                        <span class="badge bg-warning text-dark me-2">高</span>
+                        {% endif %}
+                        <small class="text-muted me-3">{{ task.due_date }}</small>
+                        <a href="{{ url_for('complete_task', task_id=task.id) }}" class="btn btn-sm btn-outline-success">完成</a>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted mb-0">暂无近期任务，真棒！🎉</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,14 @@
+{
+  "name": "openclaw-qq-bridge",
+  "version": "0.1.0",
+  "description": "Bridge between go-cqhttp (QQ) and OpenClaw",
+  "main": "bridge.js",
+  "type": "module",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "node-fetch": "^3.3.2"
+  }
+}

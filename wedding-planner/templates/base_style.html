@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    /* 备婚APP风格 - 参考小红书婚礼设计 */
+    :root {
+        --wedding-pink: #ffb6c1;
+        --wedding-rose: #ffc0cb;
+        --wedding-blush: #ffe4e1;
+        --wedding-champagne: #f7e7ce;
+        --wedding-cream: #faf5f2;
+        --wedding-text: #4a4a4a;
+        --wedding-text-light: #8a8a8a;
+        --wedding-border: #f0e6e3;
+    }
+
+    body {
+        background: linear-gradient(180deg, var(--wedding-cream) 0%, #fff 100%);
+        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        color: var(--wedding-text);
+    }
+
+    /* 柔和背景图案 - 极淡 */
+    body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: url('/static/images/wedding- ornaments.png');
+        background-repeat: repeat;
+        opacity: 0.03;
+        pointer-events: none;
+        z-index: -1;
+    }
+
+    /* 顶部导航 - 极简 */
+    .navbar {
+        background: rgba(250, 245, 242, 0.95) !important;
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--wedding-border);
+        box-shadow: none !important;
+        padding: 12px 0;
+    }
+
+    .navbar-brand {
+        color: var(--wedding-pink) !important;
+        font-family: 'Georgia', 'Noto Serif SC', serif;
+        font-weight: 600;
+        font-size: 1.4rem;
+        letter-spacing: 0.5px;
+    }
+
+    .navbar-text {
+        color: var(--wedding-text-light) !important;
+        font-size: 0.85rem;
+    }
+
+    /* 侧边栏 - 卡片式 */
+    .sidebar {
+        background: transparent;
+        border-right: none;
+        padding: 20px 0;
+    }
+
+    .nav-link {
+        color: var(--wedding-text) !important;
+        border-radius: 12px;
+        margin: 6px 16px;
+        padding: 12px 20px;
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+        background: transparent;
+        border: 1px solid transparent;
+    }
+
+    .nav-link:hover {
+        background: var(--wedding-blush);
+        color: var(--wedding-pink) !important;
+        transform: none;
+    }
+
+    .nav-link.active {
+        background: white;
+        color: var(--wedding-pink) !important;
+        border-color: var(--wedding-border);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+
+    .nav-link i {
+        color: var(--wedding-champagne);
+        font-size: 1.1rem;
+        margin-right: 10px;
+    }
+
+    .nav-link.active i {
+        color: var(--wedding-pink);
+    }
+
+    /* 卡片 - 白底圆角 */
+    .card {
+        background: white;
+        border: 1px solid var(--wedding-border);
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        transition: all 0.3s ease;
+        overflow: hidden;
+    }
+
+    .card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        border-color: var(--wedding-pink);
+    }
+
+    .card-header {
+        background: var(--wedding-cream) !important;
+        border-bottom: 1px solid var(--wedding-border) !important;
+        border-radius: 16px 16px 0 0 !important;
+        padding: 16px 24px;
+        font-weight: 600;
+        color: var(--wedding-text);
+        font-size: 1rem;
+    }
+
+    /* 按钮 - 柔和圆润 */
+    .btn {
+        border-radius: 20px;
+        padding: 10px 24px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--wedding-pink) 0%, #ff9999 100%);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #ff9999 0%, var(--wedding-pink) 100%);
+        box-shadow: 0 4px 12px rgba(255, 182, 193, 0.4);
+        transform: translateY(-1px);
+    }
+
+    .btn-outline-primary {
+        background: white;
+        border: 1.5px solid var(--wedding-pink);
+        color: var(--wedding-pink);
+    }
+
+    .btn-outline-primary:hover {
+        background: var(--wedding-pink);
+        color: white;
+    }
+
+    .btn-outline-secondary {
+        border: 1.5px solid var(--wedding-border);
+        color: var(--wedding-text);
+    }
+
+    .btn-outline-secondary:hover {
+        background: var(--wedding-cream);
+        border-color: var(--wedding-pink);
+        color: var(--wedding-pink);
+    }
+
+    /* 徽章 - 柔和 */
+    .badge {
+        border-radius: 12px;
+        padding: 6px 12px;
+        font-weight: 500;
+        font-size: 0.8rem;
+        border: none;
+    }
+
+    .badge.bg-primary { background: var(--wedding-pink) !important; color: white; }
+    .badge.bg-success { background: #b5e8c8 !important; color: #3a7a56; }
+    .badge.bg-warning { background: var(--wedding-champagne) !important; color: #8a6d3b; }
+    .badge.bg-danger { background: #f8d7da !important; color: #721c24; }
+    .badge.bg-info { background: #d1ecf1 !important; color: #0c5460; }
+
+    /* 表格 */
+    .table {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background: var(--wedding-cream);
+        border-bottom: 1px solid var(--wedding-border);
+        color: var(--wedding-text);
+        font-weight: 600;
+        font-size: 0.9rem;
+        padding: 12px 16px;
+    }
+
+    .table-hover tbody tr:hover {
+        background: rgba(255, 182, 193, 0.05);
+    }
+
+    .table td {
+        padding: 14px 16px;
+        vertical-align: middle;
+        border-bottom: 1px solid var(--wedding-border);
+    }
+
+    /* 表单 */
+    .form-control, .form-select {
+        border: 1.5px solid var(--wedding-border);
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-size: 0.95rem;
+        transition: all 0.2s;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: var(--wedding-pink);
+        box-shadow: 0 0 0 3px rgba(255, 182, 193, 0.15);
+    }
+
+    .form-check-input:checked {
+        background-color: var(--wedding-pink);
+        border-color: var(--wedding-pink);
+    }
+
+    /* 模态框 */
+    .modal-content {
+        border-radius: 20px;
+        border: 1px solid var(--wedding-border);
+        box-shadow: 0 16px 48px rgba(0,0,0,0.12);
+    }
+
+    .modal-header {
+        background: var(--wedding-cream);
+        border-bottom: 1px solid var(--wedding-border);
+        border-radius: 20px 20px 0 0 !important;
+    }
+
+    .modal-footer {
+        border-top: 1px solid var(--wedding-border);
+    }
+
+    /* 任务样式 */
+    .task-card {
+        background: white;
+        border: 1px solid var(--wedding-border);
+        border-left: 4px solid var(--wedding-champagne);
+        border-radius: 12px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: all 0.2s ease;
+    }
+
+    .task-card:hover {
+        box-shadow: 0 4px 12px rgba(255, 182, 193, 0.12);
+        border-left-color: var(--wedding-pink);
+    }
+
+    .task-card.completed {
+        opacity: 0.5;
+        background: var(--wedding-cream);
+        border-left-color: #b5e8c8;
+    }
+
+    .task-card.overdue {
+        border-left-color: #f8d7da;
+        background: #fff5f5;
+    }
+
+    .task-card.not-needed {
+        opacity: 0.4;
+        background: #f8f8f8;
+        border-left-color: #e0e0e0;
+    }
+
+    .phase-badge {
+        font-size: 0.75rem;
+        padding: 4px 10px;
+        border-radius: 12px;
+        background: var(--wedding-cream);
+        color: var(--wedding-text-light);
+        border: 1px solid var(--wedding-border);
+    }
+
+    .reference-tag {
+        font-size: 0.75rem;
+        background: rgba(255, 182, 193, 0.15);
+        color: var(--wedding-pink);
+        padding: 2px 10px;
+        border-radius: 12px;
+        margin-left: 8px;
+        border: 1px dashed var(--wedding-champagne);
+    }
+
+    /* 统计卡片 */
+    .stat-card {
+        background: white;
+        border: 1px solid var(--wedding-border);
+        border-radius: 16px;
+        padding: 20px;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(255, 182, 193, 0.12);
+        border-color: var(--wedding-pink);
+    }
+
+    .stat-card h3 {
+        color: var(--wedding-pink);
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .stat-card small {
+        color: var(--wedding-text-light);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* 下拉菜单 */
+    .dropdown-menu {
+        border: 1px solid var(--wedding-border);
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        padding: 8px 0;
+    }
+
+    .dropdown-item {
+        color: var(--wedding-text);
+        padding: 8px 20px;
+        font-size: 0.9rem;
+    }
+
+    .dropdown-item:hover {
+        background: var(--wedding-blush);
+        color: var(--wedding-pink);
+    }
+
+    /* 分页 */
+    .pagination .page-link {
+        border: 1px solid var(--wedding-border);
+        color: var(--wedding-text);
+        border-radius: 8px;
+        margin: 0 2px;
+    }
+
+    .pagination .page-item.active .page-link {
+        background: var(--wedding-pink);
+        border-color: var(--wedding-pink);
+        color: white;
+        border-radius: 8px;
+    }
+
+    /* 辅助类 */
+    .text-pink { color: var(--wedding-pink) !important; }
+    .bg-pink-light { background: rgba(255, 182, 193, 0.15) !important; }
+    .border-pink { border-color: var(--wedding-pink) !important; }
+</style>
+{% endblock %}

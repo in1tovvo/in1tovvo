@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}新建任务 - 备婚大作战{% endblock %}
+
+{% block extra_css %}
+<style>
+    .checklist-item {
+        background: #f8f9fa;
+        padding: 8px 12px;
+        margin: 4px 0;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        border-left: 3px solid #667eea;
+    }
+    .reference-card {
+        background: #e3f2fd;
+        border: 1px solid #bbdefb;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .reference-card:hover {
+        background: #bbdefb;
+        transform: translateY(-2px);
+    }
+    .reference-card.selected {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+    .priority-badge {
+        font-size: 0.8rem;
+        padding: 4px 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h4 class="mb-0"><i class="bi bi-plus-circle me-2"></i>新建任务</h4>
+            </div>
+            <div class="card-body">
+                <ul class="nav nav-tabs mb-4" id="taskTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual" type="button">
+                            ✏️ 手动创建
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="template-tab" data-bs-toggle="tab" data-bs-target="#template" type="button">
+                            📋 从内置事项选择
+                        </button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content" id="taskTabContent">
+                    <!-- 手动创建 -->
+                    <div class="tab-pane fade show active" id="manual" role="tabpanel">
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label class="form-label">任务名称 <span class="text-danger">*</span></label>
+                                <input type="text" name="title" class="form-control" required placeholder="如：预订婚礼场地">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">任务描述</label>
+                                <textarea name="description" class="form-control" rows="3" 
+                                          placeholder="详细说明任务内容、注意事项..."></textarea>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">分类</label>
+                                    <select name="category" class="form-select">
+                                        {% for cat in categories %}
+                                        <option value="{{ cat }}">{{ cat }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">阶段</label>
+                                    <select name="phase" class="form-select">
+                                        {% for phase in phases %}
+                                        <option value="{{ phase }}">{{ phase }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">截止日期</label>
+                                    <input type="date" name="due_date" class="form-control">
+                                    <small class="text-muted">基于婚礼日期自动推算更准确</small>
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">负责人</label>
+                                    <input type="text" name="assigned_to" class="form-control" 
+                                           placeholder="如：新郎、新娘、策划师">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">优先级</label>
+                                <select name="priority" class="form-select">
+                                    <option value="critical">紧急</option>
+                                    <option value="high">高</option>
+                                    <option value="medium" selected>中</option>
+                                    <option value="low">低</option>
+                                </select>
+                            </div>
+
+                            <div class="d-flex justify-content-between">
+                                <a href="{{ url_for('tasks') }}" class="btn btn-outline-secondary">取消</a>
+                                <button type="submit" class="btn btn-primary">创建任务</button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- 从模板选择 -->
+                    <div class="tab-pane fade" id="template" role="tabpanel">
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle me-2"></i>
+                            点击下方事项卡片即可快速添加该任务到您的待办清单。系统会自动计算截止日期。
+                        </div>
+                        
+                        <div class="row">
+                            {% for phase_name, items in checklist_items.items() %}
+                            <div class="col-12 mb-4">
+                                <h6 class="border-bottom pb-2 mb-3">
+                                    <span class="badge bg-primary">{{ phase_name }}</span>
+                                </h6>
+                                <div class="row">
+                                    {% for item in items %}
+                                    <div class="col-md-6 mb-2">
+                                        <div class="reference-card" 
+                                             data-title="{{ item.title }}"
+                                             data-category="{{ item.category }}"
+                                             data-phase="{{ phase_name }}"
+                                             data-priority="{{ item.priority }}"
+                                             data-description="{{ item.description }}"
+                                             data-checklist="{{ item.checklist|join(';') }}">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <strong>{{ item.title }}</strong>
+                                                    <div class="small text-muted mt-1">{{ item.category }}</div>
+                                                </div>
+                                                <span class="badge bg-{{ item.priority == 'critical' and 'danger' or item.priority == 'high' and 'warning' or item.priority == 'medium' and 'info' or 'secondary' }} priority-badge">
+                                                    {{ {'critical':'紧急','high':'高','medium':'中','low':'低'}[item.priority] }}
+                                                </span>
+                                            </div>
+                                            {% if item.description %}
+                                            <small class="text-muted d-block mt-2">{{ item.description[:80] }}{% if item.description|length > 80 %}...{% endif %}</small>
+                                            {% endif %}
+                                            <div class="mt-2 small">
+                                                <i class="bi bi-list-check me-1"></i>
+                                                包含 {{ item.checklist|length }} 个步骤
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 隐藏表单用于快速添加模板任务 -->
+<form id="quickAddForm" method="POST" action="{{ url_for('create_task') }}" style="display:none;">
+    <input type="hidden" name="title" id="quick_title">
+    <input type="hidden" name="description" id="quick_description">
+    <input type="hidden" name="category" id="quick_category">
+    <input type="hidden" name="phase" id="quick_phase">
+    <input type="hidden" name="priority" id="quick_priority">
+    <input type="hidden" name="reference_id" id="quick_reference_id">
+    <input type="hidden" name="due_date" id="quick_due_date">
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 设置婚礼日期（用于自动计算deadline）
+    const weddingDate = document.getElementById('quick_due_date');
+    
+    // 模板卡片点击事件
+    document.querySelectorAll('.reference-card').forEach(card => {
+        card.addEventListener('click', function() {
+            // 填充隐藏表单
+            document.getElementById('quick_title').value = this.dataset.title;
+            document.getElementById('quick_description').value = this.dataset.description;
+            document.getElementById('quick_category').value = this.dataset.category;
+            document.getElementById('quick_phase').value = this.dataset.phase;
+            document.getElementById('quick_priority').value = this.dataset.priority;
+            
+            // 自动计算截止日期（基于婚礼日期）
+            const phase = this.dataset.phase;
+            const daysMap = {
+                '18-12个月': 365,
+                '12-9个月': 270,
+                '9-6个月': 180,
+                '6-3个月': 90,
+                '3-1个月': 30,
+                '1-0周': 7,
+                '婚礼当天': 0,
+                '婚礼后1周': -7
+            };
+            const days = daysMap[phase] || 0;
+            
+            // 从现有婚礼日期计算，或使用默认（一年后）
+            let dueDate = new Date();
+            dueDate.setDate(dueDate.getDate() + days);
+            document.getElementById('quick_due_date').value = dueDate.toISOString().split('T')[0];
+            
+            // 提交表单
+            document.getElementById('quickAddForm').submit();
+        });
+    });
+});
+</script>
+{% endblock %}

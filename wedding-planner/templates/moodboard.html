@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4><i class="bi bi-images me-2 text-pink"></i>灵感板</h4>
+    <a href="{{ url_for('create_moodboard') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-upload me-1"></i>上传
+    </a>
+</div>
+
+{% if moodboards %}
+<div class="row g-3">
+    {% for item in moodboards %}
+    <div class="col-md-4 col-6">
+        <div class="card h-100">
+            {% if item.image_url %}
+            <img src="{{ item.image_url }}" class="card-img-top" style="height: 200px; object-fit: cover;" alt="{{ item.title }}">
+            {% else %}
+            <div class="bg-light d-flex align-items-center justify-content-center" style="height: 200px;">
+                <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
+            </div>
+            {% endif %}
+            <div class="card-body">
+                <h6 class="card-title mb-1">{{ item.title }}</h6>
+                <small class="text-muted">{{ item.category }}</small>
+                {% if item.tags %}
+                <div class="mt-2">
+                    {% for tag in item.tags.split(',') %}
+                    <span class="badge bg-light text-dark">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-images text-muted" style="font-size: 4rem;"></i>
+    <p class="text-muted mt-3 mb-0">灵感板空空如也</p>
+    <a href="{{ url_for('create_moodboard') }}" class="btn btn-primary btn-sm mt-2">上传第一张</a>
+</div>
+{% endif %}
+{% endblock %}
