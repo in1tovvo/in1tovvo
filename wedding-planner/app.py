@@ -723,17 +723,15 @@ def seating_export():
         download_name=f'seating_chart_{date.today().strftime("%Y%m%d")}.csv'
     )
 
-@app.before_first_request
-def before_first_request():
-    """首次请求时初始化数据库和认证"""
+# Vercel 初始化：在模块加载时自动执行一次
+try:
     init_db()
     init_auth()
+except Exception as e:
+    print(f"初始化警告（首次冷启动可能失败，首次请求会重试）: {e}")
 
 if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    init_db()
-    init_auth()
     print("Wedding Planner 启动中...")
-    print(f"数据库: {app.config['DATABASE']}")
-    print(f"预设流程阶段: 8 个")
+    print(f"数据库类型: {app.config['DATABASE_TYPE']}")
     app.run(debug=True, host='0.0.0.0', port=5000)
