@@ -9,8 +9,9 @@
 
 ### 1. 本地准备（已完成）
 - ✅ `app.py` - 主应用（已适配Vercel）
-- ✅ `vercel.json` - Vercel配置文件
-- ✅ `requirements.txt` - Python依赖
+- ✅ `index.py` - Vercel入口点（修复entrypoint问题）
+- ✅ `vercel.json` - Vercel配置文件（指向index.py）
+- ✅ `requirements.txt` - Python依赖（包含gunicorn）
 - ✅ `auth.py` - 认证模块
 - ✅ 模板和静态文件
 
@@ -18,7 +19,7 @@
 ```bash
 cd /home/in1t/.openclaw/workspace/wedding-planner
 git add -A
-git commit -m "feat: 添加登录验证，适配Vercel部署"
+git commit -m "fix: 添加index.py入口文件，解决Vercel entrypoint问题"
 git push origin master
 ```
 
@@ -56,9 +57,16 @@ git push origin master
 
 ## 故障排除
 
-### 构建失败
-- 检查 `requirements.txt` 是否包含 `Flask==2.3.3` 和 `psycopg2-binary`
-- 确保 `vercel.json` 在项目根目录
+### 构建失败: "No python entrypoint found"
+**原因：** Vercel无法在根目录找到明确的entrypoint。
+**解决：**
+1. 确保 `index.py` 存在且内容为 `from app import app`
+2. 确保 `vercel.json` 的 `builds.src` 指向 `index.py`
+3. 重新部署
+
+### 构建失败: 依赖问题
+- 检查 `requirements.txt` 是否包含所有依赖
+- 确保版本号正确（Flask==2.3.3, psycopg2-binary==2.9.9, gunicorn==21.2.0）
 
 ### 数据库连接错误
 - 确认 `DATABASE_URL` 环境变量已正确设置
