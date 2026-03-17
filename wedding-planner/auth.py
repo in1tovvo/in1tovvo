@@ -31,7 +31,9 @@ def init_auth():
     
     # 根据数据库类型写兼容SQL
     db_url = os.environ.get('DATABASE_URL', '')
-    if db_url.startswith('postgresql://'):
+    is_postgres = db_url.startswith('postgresql://')
+    
+    if is_postgres:
         # PostgreSQL语法
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
@@ -52,24 +54,24 @@ def init_auth():
             )
         ''')
     
-    # 检查是否已有用户
-    is_postgres = db_url.startswith('postgresql://')
-    if is_postgres:
-        cursor.execute('SELECT COUNT(*) as cnt FROM users')
-    else:
-        cursor.execute('SELECT COUNT(*) FROM users')
-    
+    # 检查是否已有用户（统一使用别名）
+    cursor.execute('SELECT COUNT(*) as cnt FROM users')
     row = cursor.fetchone()
-    count = row['cnt'] if is_postgres else row[0] if isinstance(row, (list, tuple)) else row['count(*)']
+    count = row['cnt']
     
     if count == 0:
         default_pw = 'admin123'
         hashed = generate_password_hash(default_pw, method='pbkdf2:sha256', salt_length=16)
-        cursor.execute(
-            'INSERT INTO users (username, password) VALUES (%s, %s)' if db_url.startswith('postgresql://') 
-            else 'INSERT INTO users (username, password) VALUES (?, ?)',
-            ('admin', hashed)
-        )
+        if is_postgres:
+            cursor.execute(
+                'INSERT INTO users (username, password) VALUES (%s, %s)',
+                ('admin', hashed)
+            )
+        else:
+            cursor.execute(
+                'INSERT INTO users (username, password) VALUES (?, ?)',
+                ('admin', hashed)
+            )
         print('⚠️  默认账户创建：admin / admin123（请首次登录后修改密码）')
     
     conn.commit()

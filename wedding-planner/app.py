@@ -36,12 +36,50 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 def get_db():
-    """获取数据库连接"""
+    """获取数据库连接（支持SQLite和PostgreSQL）"""
     if 'db' not in g:
-        conn = sqlite3.connect(app.config['DATABASE'])
-        conn.row_factory = sqlite3.Row
-        g.db = conn
+        if app.config['DATABASE_TYPE'] == 'postgresql':
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+            conn = psycopg2.connect(app.config['DATABASE_URL'])
+            conn.cursor_factory = RealDictCursor
+            g.db = DBAdapter(conn, 'postgresql')
+        else:
+            conn = sqlite3.connect(app.config['DATABASE'])
+            conn.row_factory = sqlite3.Row
+            g.db = DBAdapter(conn, 'sqlite')
     return g.db
+
+class DBAdapter:
+    """数据库适配器，统一SQLite和PostgreSQL的接口"""
+    def __init__(self, conn, db_type):
+        self.conn = conn
+        self.db_type = db_type
+        self.cursor = None
+    
+    def execute(self, sql, params=None):
+        """执行SQL，自动转换占位符"""
+        if self.db_type == 'postgresql':
+            sql = sql.replace('?', '%s')
+        self.cursor = self.conn.cursor()
+        if params:
+            self.cursor.execute(sql, params)
+        else:
+            self.cursor.execute(sql)
+        return self.cursor
+    
+    def commit(self):
+        """提交事务"""
+        self.conn.commit()
+    
+    def rollback(self):
+        """回滚事务"""
+        self.conn.rollback()
+    
+    def close(self):
+        """关闭连接"""
+        if self.conn:
+            self.conn.close()
 
 @app.teardown_appcontext
 def close_db(error):
@@ -50,25 +88,32 @@ def close_db(error):
         db.close()
 
 def init_db():
-    """初始化数据库表"""
-    db_path = os.path.dirname(app.config['DATABASE'])
-    os.makedirs(db_path, exist_ok=True)
+    """初始化数据库表（支持SQLite和PostgreSQL）"""
+    if app.config['DATABASE_TYPE'] == 'postgresql':
+        # PostgreSQL 使用 get_db().conn 获取原始连接
+        db_adapter = get_db()
+        conn = db_adapter.conn
+        cursor = conn.cursor()
+    else:
+        db_path = os.path.dirname(app.config['DATABASE'])
+        os.makedirs(db_path, exist_ok=True)
+        conn = sqlite3.connect(app.config['DATABASE'])
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
     
-    conn = sqlite3.connect(app.config['DATABASE'])
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    # 表结构定义（使用通用语法，两种数据库都兼容）
+    # PostgreSQL 和 SQLite 都支持 SERIAL/INTEGER PRIMARY KEY AUTOINCREMENT
     
-    # 表结构定义
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS settings (
-            id INTEGER PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             key TEXT UNIQUE NOT NULL,
             value TEXT
         )
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             category TEXT NOT NULL,
             priority TEXT NOT NULL,
@@ -80,7 +125,7 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS guests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             phone TEXT,
             relationship TEXT NOT NULL,
@@ -93,7 +138,7 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS budget (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             category TEXT NOT NULL,
             item TEXT NOT NULL,
             estimated REAL,
@@ -107,7 +152,7 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS vendors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             category TEXT NOT NULL,
             contact TEXT,
@@ -121,7 +166,7 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS moodboard (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             image_path TEXT NOT NULL,
             category TEXT,
@@ -131,7 +176,7 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             table_number INTEGER UNIQUE NOT NULL,
             table_name TEXT NOT NULL,
             shape TEXT DEFAULT 'round',
@@ -140,7 +185,7 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS guest_tables (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             guest_id INTEGER REFERENCES guests(id) ON DELETE CASCADE,
             table_id INTEGER REFERENCES tables(id) ON DELETE CASCADE,
             seat_number INTEGER,
@@ -149,7 +194,8 @@ def init_db():
     ''')
     
     conn.commit()
-    conn.close()
+    if app.config['DATABASE_TYPE'] == 'sqlite':
+        conn.close()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -161,20 +207,20 @@ def inject_context():
     db = get_db()
     
     pending_tasks = db.execute(
-        "SELECT COUNT(*) FROM tasks WHERE status != 'completed'"
-    ).fetchone()[0] or 0
+        "SELECT COUNT(*) as count FROM tasks WHERE status != 'completed'"
+    ).fetchone()['count'] or 0
     
     # 兼容新旧宾客表结构
     try:
         # 新结构：status字段
         unconfirmed_guests = db.execute(
-            "SELECT COUNT(*) FROM guests WHERE status = 'no_response' OR status = ''"
-        ).fetchone()[0] or 0
+            "SELECT COUNT(*) as count FROM guests WHERE status = 'no_response' OR status = ''"
+        ).fetchone()['count'] or 0
     except:
         # 旧结构：invitation_status + rsvp_status
         unconfirmed_guests = db.execute(
-            "SELECT COUNT(*) FROM guests WHERE invitation_status = 'pending' OR rsvp_status = 'no_response' OR rsvp_status = ''"
-        ).fetchone()[0] or 0
+            "SELECT COUNT(*) as count FROM guests WHERE invitation_status = 'pending' OR rsvp_status = 'no_response' OR rsvp_status = ''"
+        ).fetchone()['count'] or 0
     
     wedding_date = db.execute("SELECT value FROM settings WHERE key='wedding_date'").fetchone()
     wedding_date = wedding_date['value'] if wedding_date else None
@@ -617,9 +663,9 @@ def api_seating_arrange():
     table = db.execute('SELECT capacity FROM tables WHERE id=?', (table_id,)).fetchone()
     if table:
         current_count = db.execute(
-            'SELECT COUNT(*) FROM guest_tables WHERE table_id=?', 
+            'SELECT COUNT(*) as count FROM guest_tables WHERE table_id=?', 
             (table_id,)
-        ).fetchone()[0]
+        ).fetchone()['count']
         if current_count >= table['capacity']:
             return jsonify({'status': 'error', 'message': '该桌已满'}), 400
     
@@ -676,6 +722,12 @@ def seating_export():
         as_attachment=True,
         download_name=f'seating_chart_{date.today().strftime("%Y%m%d")}.csv'
     )
+
+@app.before_first_request
+def before_first_request():
+    """首次请求时初始化数据库和认证"""
+    init_db()
+    init_auth()
 
 if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)

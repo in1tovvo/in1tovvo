@@ -65,22 +65,71 @@ git push origin master
 3. 重新部署
 
 ### 构建失败: 依赖问题
-- 检查 `requirements.txt` 是否包含所有依赖
-- 确保版本号正确（Flask==2.3.3, psycopg2-binary==2.9.9, gunicorn==21.2.0）
+- 检查 `requirements.txt` 是否包含所有依赖：Flask==2.3.3, psycopg2-binary==2.9.9, gunicorn==21.2.0, python-dotenv==1.0.0
+- 确保版本号正确
 
-### 数据库连接错误
-- 确认 `DATABASE_URL` 环境变量已正确设置
-- Neon数据库需开启 "Pooler" 模式
+### 访问超时 / 数据库连接错误
+**症状：** 页面加载很久，最终超时或 500 错误。
+
+**原因：**
+1. **Neon 数据库未初始化表结构**：首次部署需要自动创建表
+2. **DATABASE_URL 环境变量未设置或错误**
+3. **Neon 数据库连接池满或 IP 限制**
+4. **Vercel 函数冷启动 + 数据库首次连接慢**
+
+**解决步骤：**
+
+#### ✅ 步骤 1：确认环境变量正确
+在 Vercel 项目：
+- Settings → Environment Variables
+- 确认 `DATABASE_URL` 已设置，值为你的 Neon 连接字符串（格式：`postgresql://user:pass@host/db?sslmode=require`）
+
+**注意：** Neon 连接串必须包含 `?sslmode=require`，否则连接会被拒绝。
+
+#### ✅ 步骤 2：检查 Neon 数据库状态
+1. 登录 Neon 控制台
+2. 查看你的数据库是否处于 **Active** 状态
+3. 检查 **Connection Pool** 设置，免费版默认为 5 个连接
+4. 确认没有达到连接数上限
+
+#### ✅ 步骤 3：查看 Vercel 函数日志
+Vercel 控制台 → your project → **Logs**
+- 查看是否有数据库错误（如 "connection refused", "password authentication failed"）
+- 如果有 `psycopg2` 导入错误，说明依赖问题
+
+#### ✅ 步骤 4：手动触发表初始化（可选）
+如果怀疑表未创建，可以：
+1. 在 Vercel 项目部署完成后，访问任意路由（首次请求会自动初始化）
+2. 或通过 Flutter shell 运行本地脚本连接 Neon 手动创建表
+
+#### ✅ 步骤 5：测试数据库连接
+在 Vercel 函数的日志中，你可以添加临时调试代码来打印连接状态：
+
+```python
+# 在 app.py 的 before_first_request 中添加：
+import sys
+print("DATABASE_URL:", os.environ.get('DATABASE_URL'), file=sys.stderr)
+```
+
+然后查看 Vercel 日志。
+
+#### ✅ 步骤 6：等待冷启动
+Vercel 免费版首次访问会冷启动 5-10 秒，如果此时数据库连接也慢，可能超时。：
+- 刷新几次试试
+- 或使用 UptimeRobot 保持实例活跃（但 Vercel 免费版仍会休眠）
+
+#### ✅ 步骤 7：检查网络延迟
+如果 Neon 数据库区域和 Vercel 区域不匹配（如 Neon 在美西，Vercel 节点在亚洲），连接可能慢。建议：
+- Neon 选择亚太区域（如 ap-southeast-1）
+- Vercel 默认全球 CDN，但函数执行区域可能不同，可以在 Vercel 设置中指定区域（Region）
 
 ### 静态文件404
 - 确保 `static/` 目录在项目根目录
 - Vercel会自动提供 `/static/*` 路由
 
-## 后续优化建议
-- 添加自定义域名（备案后配置）
-- 设置UptimeRobot保持实例活跃（避免休眠）
-- 接入外部图片存储（如Cloudinary）持久化上传文件
-- 启用Vercel Analytics分析访问数据
+### 认证初始化失败
+- 首次访问会自动创建默认管理员账户：admin / admin123
+- 如果登录页面打不开，检查 `init_auth()` 是否被调用（通过 before_first_request）
 
 ---
 
