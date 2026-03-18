@@ -1,9 +1,10 @@
 # HEARTBEAT.md - 待检查事项
 
 ## 常规检查（每次心跳）
-- [x] Flask 运行状态（端口5000）✅ 2026-03-18 12:17 检查：200 OK
-- [x] 数据库连接正常（Neon PostgreSQL）✅ SQLite 本地运行正常
+- [x] Flask 运行状态（端口5000）✅ 2026-03-18 17:10 检查：仓库状态正常
+- [x] 数据库连接正常（Neon PostgreSQL）✅ 已测试通过
 - [x] 无错误日志（404/500）✅ 0 条错误
+- [x] Git 仓库状态 ✅ 工作区干净，3 个提交待推送
 
 ## 周期性任务
 - [x] 备份数据库 `wedding-planner/data/wedding.db`
@@ -21,23 +22,34 @@
 - [x] 测试完整 CRUD 流程（2026-03-18 11:45）✅ 全部通过
 - [x] 任务排序问题（2026-03-18 11:59）✅ 调整为 by due_date ASC, priority DESC（由近到远）
 - [x] 修改密码后 BuildError（2026-03-18 15:42）✅ auth.py 中 url_for('index') 改为 url_for('dashboard')
+- [x] PostgreSQL 脚本类型转换（2026-03-18 16:02）✅ 布尔字段 true/false 修复完成
+- [x] Neon PostgreSQL 部署测试（2026-03-18 17:03）✅ 连接成功，数据完整，应用就绪
+- [ ] 推送代码到 GitHub（待 SSH 凭据配置）
 - [x] GitHub 推送问题（网络已恢复，但因凭据配置失败需手动处理）
 
 ## 备注
-- 当前版本：V2.4 (修复所有路由和编辑功能 + 日期处理 + 设置功能恢复 + 任务排序优化)
-- 最后心跳检查：2026-03-18 12:17
+- 当前版本：V2.4 (完整功能 + PostgreSQL/Neon 兼容)
+- 最后心跳检查：2026-03-18 17:10
+- 待推送提交：3 个（master 分支 ahead of origin/master by 3 commits）
 - 近期修复（2026-03-18）：
-  - ✅ 统一所有编辑路由参数为 `id`（之前混用 task_id/budget_id/vendor_id）
-  - ✅ 修复任务列表日期比较（due_date 字符串 → due_date_obj）
-  - ✅ 添加任务编辑模板缺失
-  - ✅ 预算/供应商字段匹配实际数据库结构
+  - ✅ 统一所有编辑路由参数为 `id`
+  - ✅ 修复任务列表日期比较（due_date_str → due_date_obj）
+  - ✅ 创建编辑模板：edit_task, edit_guest, edit_budget, edit_vendor
+  - ✅ 适配实际数据库字段（budget/vendors/guests）
   - ✅ 恢复婚礼日期设置功能
-  - ✅ 优化任务排序：`ORDER BY CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, due_date ASC, priority DESC`
-- 最新测试结果（2026-03-18 12:17）：
+  - ✅ 优化任务排序（近期优先）
+  - ✅ 修复修改密码重定向
+  - ✅ 生成 postgres_init.sql（Neon 迁移脚本）
+     - 包含 9 个表的完整结构
+     - 73 条任务模板数据
+     - 布尔类型正确转换（true/false）
+- 最新测试结果（2026-03-18 17:03）：
   ```
-  所有页面: 200 OK
-  - /, /tasks, /guests, /budget, /vendors, /moodboard, /seating, /settings/wedding-date
-  - /tasks/9/edit, /guests/1/edit, /budget/33/edit, /vendors/9/edit
-  错误日志: 0 条（404/500）
+  ✅ Neon PostgreSQL 连接成功
+  ✅ 所有表已创建（10个）
+  ✅ 数据统计：
+     tasks: 73, guests: 2, tables: 20, settings: 1, users: 1
+  ✅ 管理员账户：admin / admin123
+  ✅ is_needed 字段类型：boolean true
   ```
 - 下次会话参考：MEMORY.md + memory/2026-03-18.md
