@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}编辑宾客 - 备婚大作战{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h4 class="mb-0"><i class="bi bi-person-write me-2"></i>编辑宾客</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">姓名 <span class="text-danger">*</span></label>
+                            <input type="text" name="name" class="form-control" value="{{ guest.name if guest else '' }}" required>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">联系电话</label>
+                            <input type="tel" name="phone" class="form-control" value="{{ guest.phone if guest else '' }}">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">与新人关系 <span class="text-danger">*</span></label>
+                            <input type="text" name="relationship" class="form-control" value="{{ guest.relationship if guest else '' }}" placeholder="如：同事、同学、亲戚" required>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">所属方</label>
+                            <select name="side" class="form-select">
+                                <option value="both" {{ 'selected' if guest and guest.side == 'both' else '' }}>双方</option>
+                                <option value="bride" {{ 'selected' if guest and guest.side == 'bride' else '' }}>女方</option>
+                                <option value="groom" {{ 'selected' if guest and guest.side == 'groom' else '' }}>男方</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">邀请状态</label>
+                            <select name="status" class="form-select">
+                                <option value="no_response" {{ 'selected' if guest and guest.status == 'no_response' else '' }}>待回复</option>
+                                <option value="yes" {{ 'selected' if guest and guest.status == 'yes' else '' }}>参加</option>
+                                <option value="no" {{ 'selected' if guest and guest.status == 'no' else '' }}>不参加</option>
+                                <option value="attended" {{ 'selected' if guest and guest.status == 'attended' else '' }}>已到场</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">桌号</label>
+                            <input type="number" name="table_number" class="form-control" min="0" value="{{ guest.table_number if guest else '' }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">备注</label>
+                        <textarea name="notes" class="form-control" rows="3">{{ guest.notes if guest else '' }}</textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('guests') }}" class="btn btn-outline-secondary">返回列表</a>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

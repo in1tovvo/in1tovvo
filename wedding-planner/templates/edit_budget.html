@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}编辑预算 - 备婚大作战{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h4 class="mb-0"><i class="bi bi-pencil-square me-2 text-pink"></i>编辑预算</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">分类 <span class="text-danger">*</span></label>
+                            <select name="category" class="form-select" required>
+                                <option value="">请选择</option>
+                                <option value="婚宴" {{ 'selected' if item.category == '婚宴' else '' }}>婚宴</option>
+                                <option value="摄影" {{ 'selected' if item.category == '摄影' else '' }}>摄影</option>
+                                <option value="摄像" {{ 'selected' if item.category == '摄像' else '' }}>摄像</option>
+                                <option value="化妆" {{ 'selected' if item.category == '化妆' else '' }}>化妆</option>
+                                <option value="婚纱礼服" {{ 'selected' if item.category == '婚纱礼服' else '' }}>婚纱礼服</option>
+                                <option value="婚戒首饰" {{ 'selected' if item.category == '婚戒首饰' else '' }}>婚戒首饰</option>
+                                <option value="婚礼策划" {{ 'selected' if item.category == '婚礼策划' else '' }}>婚礼策划</option>
+                                <option value="场地布置" {{ 'selected' if item.category == '场地布置' else '' }}>场地布置</option>
+                                <option value="花艺" {{ 'selected' if item.category == '花艺' else '' }}>花艺</option>
+                                <option value="灯光音响" {{ 'selected' if item.category == '灯光音响' else '' }}>灯光音响</option>
+                                <option value="婚车租赁" {{ 'selected' if item.category == '婚车租赁' else '' }}>婚车租赁</option>
+                                <option value="请柬喜糖" {{ 'selected' if item.category == '请柬喜糖' else '' }}>请柬喜糖</option>
+                                <option value="其他" {{ 'selected' if item.category == '其他' else '' }}>其他</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">项目名称 <span class="text-danger">*</span></label>
+                            <input type="text" name="item" class="form-control" value="{{ item.item_name if item else '' }}" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">预算金额 (¥)</label>
+                            <input type="number" name="estimated" class="form-control" step="0.01" min="0" value="{{ item.estimated_cost if item else '' }}">
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">实际金额 (¥)</label>
+                            <input type="number" name="actual" class="form-control" step="0.01" min="0" value="{{ item.actual_cost if item else '' }}">
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">已付金额 (¥)</label>
+                            <input type="number" name="deposit" class="form-control" step="0.01" min="0" value="{{ item.deposit if item else 0 }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">尾款 (¥)</label>
+                        <input type="number" name="balance" class="form-control" step="0.01" min="0" value="{{ item.balance if item else 0 }}" readonly>
+                        <small class="text-muted">应付款 = 实际金额 - 已付金额</small>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">供应商</label>
+                            <input type="text" name="vendor" class="form-control" value="{{ item.vendor if item else '' }}">
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">状态</label>
+                            <select name="status" class="form-select">
+                                <option value="pending" {{ 'selected' if item.status == 'pending' else '' }}>待支付</option>
+                                <option value="paid" {{ 'selected' if item.status == 'paid' else '' }}>已支付</option>
+                                <option value="partial" {{ 'selected' if item.status == 'partial' else '' }}>部分支付</option>
+                                <option value="cancelled" {{ 'selected' if item.status == 'cancelled' else '' }}>已取消</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">备注</label>
+                        <textarea name="notes" class="form-control" rows="3">{{ item.notes if item else '' }}</textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('budget') }}" class="btn btn-outline-secondary">返回列表</a>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

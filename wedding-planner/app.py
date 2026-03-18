@@ -155,12 +155,15 @@ def init_db():
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             category TEXT NOT NULL,
-            contact TEXT,
+            contact_person TEXT,
             phone TEXT,
             email TEXT,
-            rating INTEGER,
-            price_estimate REAL,
+            address TEXT,
+            price_range TEXT,
+            rating REAL,
             notes TEXT,
+            contract_date DATE,
+            contract_file TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -251,6 +254,57 @@ def logout_route():
 def change_password_route():
     return change_password_view()
 
+@app.route('/settings/wedding-date', methods=['GET', 'POST'])
+@login_required
+def wedding_date_settings():
+    """设置或修改婚礼日期"""
+    db = get_db()
+    
+    # 获取当前设置的婚礼日期
+    wedding_date_row = db.execute(
+        "SELECT value FROM settings WHERE key='wedding_date'"
+    ).fetchone()
+    current_date = wedding_date_row['value'] if wedding_date_row else ''
+    
+    if request.method == 'POST':
+        wedding_date_str = request.form.get('wedding_date')
+        try:
+            # 验证日期格式
+            wedding_date = datetime.strptime(wedding_date_str, '%Y-%m-%d').date()
+            
+            # 保存到数据库（upsert）
+            if current_date:
+                db.execute(
+                    "UPDATE settings SET value = ? WHERE key = 'wedding_date'",
+                    (wedding_date_str,)
+                )
+            else:
+                db.execute(
+                    "INSERT INTO settings (key, value) VALUES ('wedding_date', ?)",
+                    (wedding_date_str,)
+                )
+            db.commit()
+            flash('婚礼日期已保存', 'success')
+            return redirect(url_for('dashboard'))
+        except ValueError:
+            flash('日期格式错误，请使用 YYYY-MM-DD 格式', 'danger')
+    
+    # 计算剩余天数用于显示
+    today = date.today()
+    days_left = None
+    if current_date:
+        try:
+            wedding_date = datetime.strptime(current_date, '%Y-%m-%d').date()
+            days_left = (wedding_date - today).days
+        except:
+            days_left = None
+    
+    return render_template('wedding_date_form.html',
+                          current_date=current_date,
+                          today=today,
+                          wedding_date=datetime.strptime(current_date, '%Y-%m-%d').date() if current_date else None,
+                          days_left=days_left)
+
 # 全局请求钩子：保护需要登录的路由
 @app.before_request
 def require_login():
@@ -259,35 +313,226 @@ def require_login():
         if request.endpoint:
             return redirect(url_for('login_route', next=request.endpoint))
 
+# ==================== 测试路由 ====================
+@app.route('/test-db')
+def test_db():
+    """测试数据库连接（临时调试用）"""
+    try:
+        db = get_db()
+        cursor = db.execute("SELECT version() as ver")
+        version = cursor.fetchone()
+        if version:
+            version = version[0] if isinstance(version, (list, tuple)) else version['ver']
+        
+        # 获取表列表
+        cursor.execute("""
+            SELECT table_name FROM information_schema.tables 
+            WHERE table_schema = 'public' ORDER BY table_name
+        """)
+        tables = [row['table_name'] if isinstance(row, dict) else row[0] for row in cursor.fetchall()]
+        
+        return jsonify({
+            'status': 'success',
+            'database_type': app.config['DATABASE_TYPE'],
+            'postgresql_version': str(version)[:60] if version else None,
+            'tables': tables,
+            'table_count': len(tables)
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 # ==================== 主页 ====================
 
 @app.route('/')
 def dashboard():
-    return render_template('dashboard.html')
+    db = get_db()
+    
+    # 统计数据
+    total_tasks = db.execute('SELECT COUNT(*) as count FROM tasks').fetchone()['count']
+    completed_tasks = db.execute("SELECT COUNT(*) as count FROM tasks WHERE status = 'completed'").fetchone()['count']
+    
+    # 需要执行的任务（未完成且日期未过期或今天到期）
+    today = date.today()
+    needed_tasks = db.execute(
+        "SELECT COUNT(*) as count FROM tasks WHERE status != 'completed' AND (due_date IS NULL OR due_date >= ?)",
+        (today,)
+    ).fetchone()['count']
+    
+    # 紧急任务（未来7天内到期且未完成）
+    week_later = today + timedelta(days=7)
+    urgent_tasks = db.execute(
+        "SELECT * FROM tasks WHERE status != 'completed' AND due_date BETWEEN ? AND ? ORDER BY due_date",
+        (today, week_later)
+    ).fetchall()
+    
+    # 近期任务（接下来7天）
+    upcoming = urgent_tasks
+    
+    return render_template('dashboard.html',
+                          total_tasks=total_tasks,
+                          completed_tasks=completed_tasks,
+                          needed_tasks=needed_tasks,
+                          urgent_tasks=urgent_tasks,
+                          upcoming=upcoming)
 
 @app.route('/tasks')
 def tasks():
-    return render_template('tasks.html')
+    db = get_db()
+    
+    # 任务查询（支持筛选）
+    status_filter = request.args.get('status')
+    phase_filter = request.args.get('phase')
+    
+    query = 'SELECT * FROM tasks WHERE 1=1'
+    params = []
+    
+    if status_filter:
+        query += ' AND status = ?'
+        params.append(status_filter)
+    
+    if phase_filter:
+        query += ' AND phase = ?'
+        params.append(phase_filter)
+    
+    query += ' ORDER BY CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, due_date ASC, priority DESC'
+    tasks = db.execute(query, params).fetchall()
+    
+    # 将任务转换为字典并处理日期
+    tasks_list = []
+    for t in tasks:
+        task_dict = dict(t)
+        # 转换 due_date 字符串为 date 对象（如果存在）
+        if task_dict.get('due_date'):
+            try:
+                task_dict['due_date_obj'] = datetime.strptime(task_dict['due_date'], '%Y-%m-%d').date()
+            except:
+                task_dict['due_date_obj'] = None
+        else:
+            task_dict['due_date_obj'] = None
+        tasks_list.append(task_dict)
+    
+    # 统计数据
+    total_tasks = len(tasks_list)
+    completed_tasks = sum(1 for t in tasks_list if t['status'] == 'completed')
+    needed_tasks = sum(1 for t in tasks_list if t['status'] != 'completed')
+    
+    # 获取所有阶段（用于筛选）
+    phases = db.execute('SELECT DISTINCT phase FROM tasks WHERE phase IS NOT NULL ORDER BY phase').fetchall()
+    phases = [p[0] for p in phases]
+    
+    # 获取今天的日期，用于比较
+    today = date.today()
+    
+    return render_template('tasks.html',
+                          tasks=tasks_list,
+                          total_tasks=total_tasks,
+                          completed_tasks=completed_tasks,
+                          needed_tasks=needed_tasks,
+                          phases=phases,
+                          today=today)
 
 @app.route('/guests')
 def guests():
-    return render_template('guests.html')
+    db = get_db()
+    guests = db.execute('SELECT * FROM guests ORDER BY name').fetchall()
+    
+    # 统计
+    total = len(guests)
+    # 兼容新旧字段
+    confirmed = 0
+    pending = 0
+    for g in guests:
+        # 转换为普通字典，方便操作
+        guest_dict = dict(g)
+        # 新结构：status 字段
+        if 'status' in guest_dict:
+            status = guest_dict['status'] or ''
+            if status == 'yes' or status == 'attended':
+                confirmed += 1
+            elif status == 'no_response' or status == '':
+                pending += 1
+        else:
+            # 旧结构： invitation_status 和 rsvp_status
+            rsvp = guest_dict.get('rsvp_status', '')
+            if rsvp == 'yes':
+                confirmed += 1
+            elif rsvp == 'no_response' or rsvp == '':
+                pending += 1
+    
+    return render_template('guests.html', 
+                          guests=guests,
+                          stats={'total': total, 'confirmed': confirmed, 'pending': pending})
 
 @app.route('/budget')
 def budget():
-    return render_template('budget.html')
+    db = get_db()
+    budgets = db.execute('SELECT * FROM budget ORDER BY category, item_name').fetchall()
+    
+    # 统计数据
+    total_est = db.execute('SELECT SUM(estimated_cost) as sum FROM budget').fetchone()['sum'] or 0
+    actual_spent = db.execute('SELECT SUM(actual_cost) as sum FROM budget').fetchone()['sum'] or 0
+    
+    return render_template('budget.html',
+                          budgets=budgets,
+                          total_est=total_est,
+                          actual_spent=actual_spent)
 
 @app.route('/vendors')
 def vendors():
-    return render_template('vendors.html')
+    db = get_db()
+    vendors = db.execute('SELECT * FROM vendors ORDER BY name').fetchall()
+    return render_template('vendors.html', vendors=vendors)
 
 @app.route('/moodboard')
 def moodboard():
-    return render_template('moodboard.html')
+    db = get_db()
+    moodboards = db.execute('SELECT * FROM moodboard ORDER BY created_at DESC').fetchall()
+    # 构建完整的图片URL
+    base_url = request.host_url.rstrip('/')
+    items = []
+    for item in moodboards:
+        items.append({
+            'id': item['id'],
+            'title': item['title'],
+            'category': item['category'],
+            'tags': item['tags'],
+            'image_url': f"{base_url}/static/images/{item['image_path']}"
+        })
+    return render_template('moodboard.html', moodboards=items)
 
 @app.route('/seating')
 def seating():
-    return render_template('seating.html')
+    db = get_db()
+    # 获取所有桌席
+    tables = db.execute('SELECT * FROM tables ORDER BY table_number').fetchall()
+    tables_list = [dict(t) for t in tables]
+    
+    # 获取所有宾客
+    guests = db.execute('SELECT * FROM guests ORDER BY name').fetchall()
+    guests_list = [dict(g) for g in guests]
+    
+    # 获取已安排的座位信息
+    seating_data = db.execute('''
+        SELECT gt.guest_id, gt.table_id, gt.seat_number, t.table_number, t.table_name
+        FROM guest_tables gt
+        JOIN tables t ON gt.table_id = t.id
+    ''').fetchall()
+    seating_list = [dict(s) for s in seating_data]
+    
+    # 构建已安排宾客ID集合
+    assigned_guest_ids = set(s['guest_id'] for s in seating_list)
+    assigned_guests = [g for g in guests_list if g['id'] in assigned_guest_ids]
+    
+    # 未安排宾客
+    unassigned_guests = [g for g in guests_list if g['id'] not in assigned_guest_ids]
+    
+    return render_template('seating_chart.html',
+                          tables=tables_list,
+                          guests=guests_list,
+                          assigned_guests=assigned_guests,
+                          unassigned_guests=unassigned_guests,
+                          seating_data=seating_list,
+                          all_guests=guests_list)
 
 # ==================== API路由（示例） ====================
 
@@ -349,6 +594,22 @@ def delete_task(id):
     flash('任务已删除', 'success')
     return redirect(url_for('tasks'))
 
+@app.route('/tasks/<int:id>/complete', methods=['POST'])
+def complete_task(id):
+    db = get_db()
+    db.execute("UPDATE tasks SET status = 'completed' WHERE id = ?", (id,))
+    db.commit()
+    flash('任务标记为已完成', 'success')
+    return redirect(url_for('tasks'))
+
+@app.route('/tasks/<int:id>/toggle-needed', methods=['POST'])
+def toggle_needed(id):
+    data = request.get_json()
+    is_needed = data.get('is_needed', 1)
+    # 这里只是一个示例，实际可能需要添加 is_needed 字段到 tasks 表
+    # 目前我们使用 status != 'completed' 作为需要执行的标记
+    return jsonify({'success': True})
+
 # ==================== 宾客管理 ====================
 
 @app.route('/guests/create', methods=['POST'])
@@ -358,11 +619,27 @@ def create_guest():
     relationship = request.form.get('relationship')
     side = request.form.get('side')
     status = request.form.get('status', 'no_response')
+    notes = request.form.get('notes')
+    
+    # 将新结构的 status 映射到旧表的 invitation_status 和 rsvp_status
+    invitation_status = 'pending'  # 默认未发送
+    rsvp_status = 'no_response'
+    
+    if status == 'yes':
+        invitation_status = 'sent'
+        rsvp_status = 'yes'
+    elif status == 'no':
+        invitation_status = 'sent'
+        rsvp_status = 'no'
+    elif status == 'attended':
+        invitation_status = 'delivered'
+        rsvp_status = 'yes'
+    # 'no_response' 保持默认
     
     db = get_db()
     db.execute(
-        'INSERT INTO guests (name, phone, relationship, side, status) VALUES (?, ?, ?, ?, ?)',
-        (name, phone, relationship, side, status)
+        'INSERT INTO guests (name, phone, relationship, side, invitation_status, rsvp_status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        (name, phone, relationship, side, invitation_status, rsvp_status, notes)
     )
     db.commit()
     flash('宾客添加成功', 'success')
@@ -384,9 +661,26 @@ def edit_guest(id):
         status = request.form.get('status')
         notes = request.form.get('notes')
         
+        # 将新结构的 status 映射到旧表的 invitation_status 和 rsvp_status
+        invitation_status = guest['invitation_status'] if 'invitation_status' in guest.keys() else 'pending'
+        rsvp_status = guest['rsvp_status'] if 'rsvp_status' in guest.keys() else 'no_response'
+        
+        if status == 'yes':
+            invitation_status = 'sent'
+            rsvp_status = 'yes'
+        elif status == 'no':
+            invitation_status = 'sent'
+            rsvp_status = 'no'
+        elif status == 'attended':
+            invitation_status = 'delivered'
+            rsvp_status = 'yes'
+        elif status == 'no_response':
+            # 保持原值或设为默认
+            pass
+        
         db.execute(
-            'UPDATE guests SET name=?, phone=?, relationship=?, side=?, status=?, notes=? WHERE id=?',
-            (name, phone, relationship, side, status, notes, id)
+            'UPDATE guests SET name=?, phone=?, relationship=?, side=?, invitation_status=?, rsvp_status=?, notes=? WHERE id=?',
+            (name, phone, relationship, side, invitation_status, rsvp_status, notes, id)
         )
         db.commit()
         flash('宾客信息已更新', 'success')
@@ -465,16 +759,18 @@ def export_guests():
 @app.route('/budget/create', methods=['POST'])
 def create_budget():
     category = request.form.get('category')
-    item = request.form.get('item')
-    estimated = request.form.get('estimated', type=float)
+    item_name = request.form.get('item')
+    estimated_cost = request.form.get('estimated', type=float)
+    actual_cost = request.form.get('actual', type=float)
+    deposit = request.form.get('deposit', type=float, default=0)
     vendor = request.form.get('vendor')
-    notes = request.form.get('notes')
     status = request.form.get('status', 'pending')
+    notes = request.form.get('notes')
     
     db = get_db()
     db.execute(
-        'INSERT INTO budget (category, item, estimated, vendor, notes, status) VALUES (?, ?, ?, ?, ?, ?)',
-        (category, item, estimated, vendor, notes, status)
+        'INSERT INTO budget (category, item_name, estimated_cost, actual_cost, deposit, vendor, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        (category, item_name, estimated_cost, actual_cost, deposit, vendor, status, notes)
     )
     db.commit()
     flash('预算条目已添加', 'success')
@@ -491,16 +787,16 @@ def edit_budget(id):
     if request.method == 'POST':
         category = request.form.get('category')
         item_name = request.form.get('item')
-        estimated = request.form.get('estimated', type=float)
-        actual = request.form.get('actual', type=float)
-        paid = request.form.get('paid', type=float)
+        estimated_cost = request.form.get('estimated', type=float)
+        actual_cost = request.form.get('actual', type=float)
+        deposit = request.form.get('deposit', type=float, default=0)
         vendor = request.form.get('vendor')
-        notes = request.form.get('notes')
         status = request.form.get('status')
+        notes = request.form.get('notes')
         
         db.execute(
-            'UPDATE budget SET category=?, item=?, estimated=?, actual=?, paid=?, vendor=?, notes=?, status=? WHERE id=?',
-            (category, item_name, estimated, actual, paid, vendor, notes, status, id)
+            'UPDATE budget SET category=?, item_name=?, estimated_cost=?, actual_cost=?, deposit=?, vendor=?, status=?, notes=? WHERE id=?',
+            (category, item_name, estimated_cost, actual_cost, deposit, vendor, status, notes, id)
         )
         db.commit()
         flash('预算条目已更新', 'success')
@@ -522,17 +818,18 @@ def delete_budget(id):
 def create_vendor():
     name = request.form.get('name')
     category = request.form.get('category')
-    contact = request.form.get('contact')
+    contact_person = request.form.get('contact')
     phone = request.form.get('phone')
     email = request.form.get('email')
-    rating = request.form.get('rating', type=int)
-    price_estimate = request.form.get('price_estimate', type=float)
+    address = request.form.get('address')
+    price_range = request.form.get('price_range')
+    rating = request.form.get('rating', type=float)
     notes = request.form.get('notes')
     
     db = get_db()
     db.execute(
-        'INSERT INTO vendors (name, category, contact, phone, email, rating, price_estimate, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        (name, category, contact, phone, email, rating, price_estimate, notes)
+        'INSERT INTO vendors (name, category, contact_person, phone, email, address, price_range, rating, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        (name, category, contact_person, phone, email, address, price_range, rating, notes)
     )
     db.commit()
     flash('供应商已添加', 'success')
@@ -549,16 +846,17 @@ def edit_vendor(id):
     if request.method == 'POST':
         name = request.form.get('name')
         category = request.form.get('category')
-        contact = request.form.get('contact')
+        contact_person = request.form.get('contact')
         phone = request.form.get('phone')
         email = request.form.get('email')
-        rating = request.form.get('rating', type=int)
-        price_estimate = request.form.get('price_estimate', type=float)
+        address = request.form.get('address')
+        price_range = request.form.get('price_range')
+        rating = request.form.get('rating', type=float)
         notes = request.form.get('notes')
         
         db.execute(
-            'UPDATE vendors SET name=?, category=?, contact=?, phone=?, email=?, rating=?, price_estimate=?, notes=? WHERE id=?',
-            (name, category, contact, phone, email, rating, price_estimate, notes, id)
+            'UPDATE vendors SET name=?, category=?, contact_person=?, phone=?, email=?, address=?, price_range=?, rating=?, notes=? WHERE id=?',
+            (name, category, contact_person, phone, email, address, price_range, rating, notes, id)
         )
         db.commit()
         flash('供应商信息已更新', 'success')
@@ -575,39 +873,6 @@ def delete_vendor(id):
     return redirect(url_for('vendors'))
 
 # ==================== 灵感板 ====================
-
-@app.route('/moodboard/upload', methods=['POST'])
-def upload_image():
-    if 'image' not in request.files:
-        flash('未选择文件', 'danger')
-        return redirect(url_for('moodboard'))
-    
-    file = request.files['image']
-    if file.filename == '':
-        flash('未选择文件', 'danger')
-        return redirect(url_for('moodboard'))
-    
-    if file and allowed_file(file.filename):
-        from werkzeug.utils import secure_filename
-        import uuid
-        
-        filename = secure_filename(file.filename)
-        unique_name = f"{uuid.uuid4().hex}_{filename}"
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_name))
-        
-        title = request.form.get('title', filename)
-        category = request.form.get('category')
-        tags = request.form.get('tags')
-        
-        db = get_db()
-        db.execute(
-            'INSERT INTO moodboard (title, image_path, category, tags) VALUES (?, ?, ?, ?)',
-            (title, unique_name, category, tags)
-        )
-        db.commit()
-        flash('图片上传成功', 'success')
-    
-    return redirect(url_for('moodboard'))
 
 @app.route('/moodboard/delete/<int:id>', methods=['POST'])
 def delete_image(id):
@@ -729,6 +994,45 @@ try:
     init_auth()
 except Exception as e:
     print(f"初始化警告（首次冷启动可能失败，首次请求会重试）: {e}")
+
+@app.route('/moodboard/upload', methods=['POST'])
+def upload_image():
+    if 'image' not in request.files:
+        flash('未选择文件', 'danger')
+        return redirect(url_for('moodboard'))
+    
+    file = request.files['image']
+    if file.filename == '':
+        flash('未选择文件', 'danger')
+        return redirect(url_for('moodboard'))
+    
+    if file and allowed_file(file.filename):
+        from werkzeug.utils import secure_filename
+        import uuid
+        
+        filename = secure_filename(file.filename)
+        unique_name = f"{uuid.uuid4().hex}_{filename}"
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_name))
+        
+        title = request.form.get('title', filename)
+        category = request.form.get('category')
+        tags = request.form.get('tags')
+        
+        db = get_db()
+        db.execute(
+            'INSERT INTO moodboard (title, image_path, category, tags) VALUES (?, ?, ?, ?)',
+            (title, unique_name, category, tags)
+        )
+        db.commit()
+        flash('图片上传成功', 'success')
+    
+    return redirect(url_for('moodboard'))
+
+@app.route('/moodboard/create', methods=['GET', 'POST'])
+def create_moodboard():
+    if request.method == 'POST':
+        return upload_image()
+    return render_template('moodboard_form.html')
 
 if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)

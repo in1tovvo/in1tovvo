@@ -150,7 +150,7 @@ def change_password_view():
             conn.commit()
             conn.close()
             flash('密码修改成功', 'success')
-            return redirect(url_for('index'))
+            return redirect(url_for('dashboard'))
         else:
             flash('原密码错误', 'danger')
     return render_template('change_password.html')

@@ -70,23 +70,17 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if guest.invitation_status == 'sent' %}
-                            <span class="badge bg-success">已发送</span>
-                            {% else %}
-                            <span class="badge bg-warning text-dark">待发送</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if guest.rsvp_status == 'yes' %}
-                            <span class="badge bg-success">参加</span>
-                            {% elif guest.rsvp_status == 'no' %}
+                            {% if guest.status == 'sent' or guest.status == 'yes' or guest.status == 'attended' %}
+                            <span class="badge bg-success">已确认</span>
+                            {% elif guest.status == 'no' %}
                             <span class="badge bg-danger">不参加</span>
                             {% else %}
-                            <span class="badge bg-light text-dark">未回复</span>
+                            <span class="badge bg-warning text-dark">待回复</span>
                             {% endif %}
                         </td>
+                        <td>{{ guest.status | default('未设置', true) }}</td>
                         <td>
-                            <a href="{{ url_for('edit_guest', guest_id=guest.id) }}" class="btn btn-sm btn-outline-secondary">编辑</a>
+                            <a href="{{ url_for('edit_guest', id=guest.id) }}" class="btn btn-sm btn-outline-secondary">编辑</a>
                         </td>
                     </tr>
                     {% endfor %}

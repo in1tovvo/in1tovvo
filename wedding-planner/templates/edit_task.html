@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}编辑任务 - 备婚大作战{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h4 class="mb-0"><i class="bi bi-pencil-square me-2"></i>编辑任务</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">任务标题 <span class="text-danger">*</span></label>
+                        <input type="text" name="title" class="form-control" value="{{ task.title }}" required>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">分类</label>
+                            <input type="text" name="category" class="form-control" value="{{ task.category or '' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">阶段</label>
+                            <select name="phase" class="form-select">
+                                <option value="">选择阶段</option>
+                                {% for phase in phases %}
+                                <option value="{{ phase }}" {{ 'selected' if task.phase == phase else '' }}>{{ phase }}</option>
+                                {% endfor %}
+                                <option value="自定义" {{ 'selected' if task.phase == '自定义' else '' }}>自定义</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">优先级</label>
+                            <select name="priority" class="form-select">
+                                <option value="low" {{ 'selected' if task.priority == 'low' else '' }}>低</option>
+                                <option value="medium" {{ 'selected' if task.priority == 'medium' else '' }}>中</option>
+                                <option value="high" {{ 'selected' if task.priority == 'high' else '' }}>高</option>
+                                <option value="critical" {{ 'selected' if task.priority == 'critical' else '' }}>紧急</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">截止日期</label>
+                            <input type="date" name="due_date" class="form-control" value="{{ task.due_date or '' }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">状态</label>
+                        <select name="status" class="form-select">
+                            <option value="pending" {{ 'selected' if task.status == 'pending' else '' }}>待办</option>
+                            <option value="completed" {{ 'selected' if task.status == 'completed' else '' }}>已完成</option>
+                            <option value="cancelled" {{ 'selected' if task.status == 'cancelled' else '' }}>已取消</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">备注</label>
+                        <textarea name="notes" class="form-control" rows="3">{{ task.notes or '' }}</textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('tasks') }}" class="btn btn-outline-secondary">返回列表</a>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+cookies.txt
+flask_test.log
+flask_heartbeat.log
+test_neon_connection.py
+export_postgres.py
+
+# Uploads
+static/images/*
+!static/images/.gitkeep
+
+# Database (local only)
+data/wedding.db
+data/wedding_backup_*.db
+
+# OS
+.DS_Store
+Thumbs.db

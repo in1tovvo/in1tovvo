@@ -52,7 +52,7 @@
 <!-- 任务列表 -->
 {% if tasks %}
     {% for task in tasks %}
-    <div class="task-card {% if task.status == 'completed' %}completed{% elif task.due_date and task.due_date < today and task.status != 'completed' %}overdue{% elif task.is_needed == 0 %}not-needed{% endif %}">
+    <div class="task-card {% if task.status == 'completed' %}completed{% elif task.due_date_obj and task.due_date_obj < today and task.status != 'completed' %}overdue{% elif task.is_needed == 0 %}not-needed{% endif %}">
         <div class="d-flex justify-content-between align-items-start">
             <div class="form-check me-3 mt-1">
                 <input class="form-check-input" type="checkbox" 
@@ -99,13 +99,13 @@
             
             <div class="btn-group btn-group-sm ms-2">
                 {% if task.status != 'completed' %}
-                <a href="{{ url_for('complete_task', task_id=task.id) }}" 
+                <a href="{{ url_for('complete_task', id=task.id) }}" 
                    class="btn btn-outline-success"
                    onclick="return confirm('完成「{{ task.title }}」？')">
                     <i class="bi bi-check"></i>
                 </a>
                 {% endif %}
-                <a href="{{ url_for('delete_task', task_id=task.id) }}" 
+                <a href="{{ url_for('delete_task', id=task.id) }}" 
                    class="btn btn-outline-danger"
                    onclick="return confirm('删除「{{ task.title }}」？')">
                     <i class="bi bi-trash"></i>

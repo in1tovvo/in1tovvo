@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}编辑供应商 - 备婚大作战{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h4 class="mb-0"><i class="bi bi-building-edit me-2"></i>编辑供应商</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">供应商名称 <span class="text-danger">*</span></label>
+                            <input type="text" name="name" class="form-control" value="{{ vendor.name if vendor else '' }}" required>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">分类 <span class="text-danger">*</span></label>
+                            <select name="category" class="form-select" required>
+                                <option value="">请选择</option>
+                                <option value="婚礼策划" {{ 'selected' if vendor.category == '婚礼策划' else '' }}>婚礼策划</option>
+                                <option value="婚礼场地" {{ 'selected' if vendor.category == '婚礼场地' else '' }}>婚礼场地</option>
+                                <option value="婚宴酒店" {{ 'selected' if vendor.category == '婚宴酒店' else '' }}>婚宴酒店</option>
+                                <option value="摄影" {{ 'selected' if vendor.category == '摄影' else '' }}>摄影</option>
+                                <option value="摄像" {{ 'selected' if vendor.category == '摄像' else '' }}>摄像</option>
+                                <option value="主持" {{ 'selected' if vendor.category == '主持' else '' }}>主持</option>
+                                <option value="化妆" {{ 'selected' if vendor.category == '化妆' else '' }}>化妆</option>
+                                <option value="婚纱礼服" {{ 'selected' if vendor.category == '婚纱礼服' else '' }}>婚纱礼服</option>
+                                <option value="婚戒首饰" {{ 'selected' if vendor.category == '婚戒首饰' else '' }}>婚戒首饰</option>
+                                <option value="灯光音响" {{ 'selected' if vendor.category == '灯光音响' else '' }}>灯光音响</option>
+                                <option value="鲜花布置" {{ 'selected' if vendor.category == '鲜花布置' else '' }}>鲜花布置</option>
+                                <option value="婚车租赁" {{ 'selected' if vendor.category == '婚车租赁' else '' }}>婚车租赁</option>
+                                <option value="甜品蛋糕" {{ 'selected' if vendor.category == '甜品蛋糕' else '' }}>甜品蛋糕</option>
+                                <option value="其他" {{ 'selected' if vendor.category == '其他' else '' }}>其他</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">联系人</label>
+                            <input type="text" name="contact" class="form-control" value="{{ vendor.contact_person if vendor else '' }}">
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">联系电话</label>
+                            <input type="tel" name="phone" class="form-control" value="{{ vendor.phone if vendor else '' }}">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">邮箱</label>
+                            <input type="email" name="email" class="form-control" value="{{ vendor.email if vendor else '' }}">
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">价格范围</label>
+                            <input type="text" name="price_range" class="form-control" value="{{ vendor.price_range if vendor else '' }}" placeholder="如：3000-5000元">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">地址</label>
+                        <textarea name="address" class="form-control" rows="2">{{ vendor.address if vendor else '' }}</textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">评分 (1-5)</label>
+                            <select name="rating" class="form-select">
+                                <option value="">暂未评分</option>
+                                {% for i in [5,4,3,2,1] %}
+                                <option value="{{ i }}" {{ 'selected' if vendor and vendor.rating == i else '' }}>{{ i }}星</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">备注</label>
+                        <textarea name="notes" class="form-control" rows="3">{{ vendor.notes if vendor else '' }}</textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('vendors') }}" class="btn btn-outline-secondary">返回列表</a>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
